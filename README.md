@@ -1,81 +1,169 @@
-# ART PROJECT
+# Настройка чистого сервера и автодеплоя
 
-Первый этап: статический адаптивный лендинг по предоставленным скриншотам Figma.
+Инструкция для **Ubuntu 24.04 LTS, x86_64 / amd64**, SSH на порту **22**. Все команды выполняются на сервере под `root` через SSH или консоль провайдера. Настройки GitHub выполняются в браузере.
 
-## Сервер и автодеплой
+GitHub Actions собирает Docker-образ и доставляет его на сервер при push в `main`. Устанавливать Node.js и клонировать репозиторий на сервер не нужно. Порт 80 должен быть свободен.
 
-Push в `main` запускает GitHub Actions: проверки → сборка Docker-образа → SSH-деплой с healthcheck и откатом при ошибке. Сервер получает готовый образ и не собирает frontend.
+## 1. Проверить систему
 
-Подготовка сервера, секреты GitHub и команды эксплуатации: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-В Git хранятся только исходники, изображения сайта, тесты, конфигурации и документация. Зависимости, кэши, сборки и настройки IDE восстанавливаются локально и исключены через `.gitignore`.
-
-## Запуск в Docker на Windows
-
-Установить и запустить Docker Desktop с Linux containers / WSL2, затем из корня:
-
-```powershell
-docker compose up --build -d
+```bash
+cat /etc/os-release
+uname -m
 ```
 
-Открыть http://localhost:8080/ru/ (также `/en/` и `/cs/`).
+Ожидаются Ubuntu 24.04 и `x86_64`. Для другой ОС или ARM нужна адаптация инструкции и сборки.
 
-```powershell
-docker compose logs -f web
-docker compose down
+## 2. Установить Docker и Compose
+
+Используется [официальный репозиторий Docker](https://docs.docker.com/engine/install/ubuntu/).
+
+```bash
+set -e
+apt-get update
+apt-get upgrade -y
+apt-get install -y ca-certificates curl util-linux ufw openssh-server
+
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+systemctl enable --now ssh
+
+docker version
+docker compose version
+docker run --rm hello-world
 ```
 
-Сборка требует интернет для npm и Docker images. Работа контейнера не требует Node.js: Nginx отдаёт готовые HTML/CSS/WebP. Порт опубликован только на loopback. Лимит 128 МБ относится к работающему контейнеру, а не сборке или Docker Desktop/WSL2: им нужно больше памяти.
+Последняя команда должна вывести `Hello from Docker!`.
 
-## Разработка без Docker
+## 3. Создать пользователя деплоя
 
-Node.js 24+ и npm:
-
-```powershell
-$env:ASTRO_TELEMETRY_DISABLED='1'
-npm ci
-npm run dev
+```bash
+id deploy >/dev/null 2>&1 || adduser --disabled-password --gecos '' deploy
+usermod -aG docker deploy
+install -d -o deploy -g deploy -m 750 /opt/art-project
+install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
 ```
 
-Адрес: http://localhost:4321/ru/. Изменения исходников обновляются автоматически. Docker-конфигурация проверяет production-сборку; после изменений для неё нужно повторить `docker compose up --build -d`.
+Группа `docker` даёт фактически административный доступ к серверу. Для автодеплоя используется отдельный ключ, который хранится в GitHub Secrets.
 
-## Проверки
+## 4. Открыть порты
 
-```powershell
-$env:ASTRO_TELEMETRY_DISABLED='1'
-npm run build
-npx playwright install chromium
-npm run test:e2e
+```bash
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw --force enable
+ufw status
 ```
 
-Для браузера, установленного внутри проекта, задать `$env:PLAYWRIGHT_BROWSERS_PATH="$PWD/artifacts/browsers"` перед установкой и тестами. Можно использовать установленный Google Chrome: `$env:PLAYWRIGHT_CHANNEL='chrome'`.
+Если включён firewall провайдера, разрешить входящие TCP 22 и 80 также в его панели. Не закрывать текущую SSH-сессию до проверки нового подключения. При нестандартном SSH-порте открыть фактический порт до включения firewall и использовать его в командах и секретах.
 
-Тесты проверяют три языка на ширинах 360, 768, 1440 px, отсутствие горизонтального переполнения страницы и ошибок JavaScript, загрузку изображений, мобильное меню, листание услуг, смену языка и доступность контента без JavaScript. Снимки RU сохраняются в `artifacts/`.
+## 5. Создать SSH-ключ GitHub Actions
 
-## Структура и решения
+```bash
+install -d -m 700 /root/.ssh
+ssh-keygen -t ed25519 -f /root/.ssh/art-project-actions -C "github-actions-art-project" -N ""
 
-- `src/pages/[lang]/index.astro` — семантическая разметка и небольшой скрипт навигации.
-- `src/data/content.ts` — типизированный контент RU/EN/CS. Переводы черновые.
-- `src/styles/global.css` — адаптивные стили без UI-фреймворка и внешних шрифтов.
-- `public/images/` — временные WebP-иллюстрации из скриншота.
-- `deploy/nginx.conf`, `Dockerfile`, `compose.yaml` — локальный запуск собранного сайта.
+cat /root/.ssh/art-project-actions.pub >> /home/deploy/.ssh/authorized_keys
+chown deploy:deploy /home/deploy/.ssh/authorized_keys
+chmod 600 /home/deploy/.ssh/authorized_keys
+```
 
-Astro выбран для статической генерации: нет клиентского Vue runtime, серверного рендеринга на каждый запрос или фонового Node-процесса. На первом этапе API и БД отсутствуют. FastAPI добавляется после определения сценария заявок, когда серверу появится реальная задача.
+Если ключ уже существует, не перезаписывать его: использовать существующий либо выбрать новое имя файла.
 
-## Границы первого этапа
+Проверить вход и доступ к Docker:
 
-Это первая вёрстка, не финальная пиксельная копия и не готовый к публикации сайт:
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+ssh -i /root/.ssh/art-project-actions -o IdentitiesOnly=yes deploy@127.0.0.1 'docker ps && docker compose version && test -w /opt/art-project && echo DEPLOY_READY'
+```
 
-- Иллюстрации вырезаны из общего скриншота, для публикации нужны исходные экспорты Figma. Логотип и символы преимуществ — временные векторные/текстовые заменители; мобильный hero и контактное фото требуют исходников.
-- Блок «до/после» пока статический: для полноценного сравнения нужны отдельные согласованные изображения одного объекта. В текущем растре присутствует нарисованная ручка из макета.
-- Реальные отзывы, числовые достижения, рейтинг, телефон, реквизиты и ссылки не выдумываются. Вместо отзывов пока заглушка.
-- Форма явно отключена, данные не собираются и не отправляются. Telegram не подключён; секретов в репозитории нет.
-- До публикации нужны проверенные тексты, переводы, политика обработки данных и согласованный сценарий заявок.
-- Индексация намеренно закрыта `robots.txt` и `noindex`. После появления домена нужно добавить абсолютные canonical/hreflang, sitemap, OG URL/изображение и затем разрешить индексацию.
-- Конфигурация автодеплоя готова; подключение реального сервера, TLS и интеграция Telegram — следующие этапы. Производительность на сервере 1 CPU / 1 ГБ ещё не измерялась.
+При первом подключении сверить fingerprint с выводом первой команды и подтвердить подключение. Ожидается `DEPLOY_READY`.
 
-## Следующие этапы
+## 6. Настроить GitHub Secrets
 
-1. Проверить первую вёрстку, заменить временные изображения и уточнить различия мобильного/ПК макетов.
-2. Согласовать сценарий Telegram, реализовать приём заявок, валидацию, ограничение запросов и обработку ошибок доставки.
-3. Утвердить контент, проверить доступность, SEO и производительность, подготовить публикацию на выбранном сервере.
+В репозитории открыть **Settings → Environments → New environment**, создать **`production`**. Разрешить deployment из **`main`**. Для автоматического запуска без подтверждения не включать **Required reviewers**.
+
+Добавить **Environment secrets**:
+
+| Secret | Значение |
+| --- | --- |
+| `DEPLOY_HOST` | Публичный IPv4 или DNS-имя сервера, без протокола и пробелов по краям |
+| `DEPLOY_USER` | `deploy` |
+| `DEPLOY_PORT` | `22` или фактический порт SSH |
+| `DEPLOY_SSH_KEY` | Полный многострочный приватный ключ, включая BEGIN/END |
+| `DEPLOY_KNOWN_HOSTS` | Строка с адресом сервера и его публичным SSH-ключом |
+
+Приватный ключ получить в консоли сервера:
+
+```bash
+cat /root/.ssh/art-project-actions
+```
+
+Скопировать весь блок в `DEPLOY_SSH_KEY`, сохранив переносы строк. Не заменять их пробелами. Не отправлять приватный ключ в сообщения и не добавлять в Git.
+
+Для `DEPLOY_KNOWN_HOSTS` выполнить в доверенной консоли сервера:
+
+```bash
+read -r -p "Публичный IPv4 или DNS-имя сервера: " deploy_host
+read -r -p "Порт SSH [22]: " deploy_port
+deploy_port=${deploy_port:-22}
+
+if [ "$deploy_port" = "22" ]; then
+  printf '%s ' "$deploy_host"
+else
+  printf '[%s]:%s ' "$deploy_host" "$deploy_port"
+fi
+cut -d ' ' -f 1,2 /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+Вставить строку целиком в `DEPLOY_KNOWN_HOSTS`. Адрес должен совпадать с `DEPLOY_HOST`. Для порта 22 формат — `адрес ssh-ed25519 ключ`, для другого порта — `[адрес]:порт ssh-ed25519 ключ`.
+
+После сохранения приватного ключа в GitHub удалить его временную копию с сервера:
+
+```bash
+rm -f /root/.ssh/art-project-actions
+```
+
+Публичный ключ в `/home/deploy/.ssh/authorized_keys` должен остаться.
+
+## 7. Запустить первый деплой
+
+Отправить файлы проекта в ветку `main`, например через **Commit and Push** в PyCharm. Открыть в GitHub **Actions → Check and deploy**, дождаться успешного завершения `build` и `deploy`.
+
+Если файлы уже в `main`, выбрать **Run workflow** для `main`. При ошибке открыть лог первого упавшего шага. До настройки секретов и SSH-доступа деплой не сможет завершиться.
+
+Сервер получает готовый образ в `/opt/art-project`, запускает контейнер и проверяет healthcheck. При неудачном запуске скрипт пытается восстановить предыдущий релиз, если он существует. Последующие push в `main` запускают обновление автоматически.
+
+## 8. Проверить сайт
+
+На сервере:
+
+```bash
+curl --fail http://127.0.0.1/healthz
+cd /opt/art-project
+docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml ps
+```
+
+Ожидаются ответ `ok` и статус контейнера `healthy`. В браузере открыть `http://ПУБЛИЧНЫЙ_IP_СЕРВЕРА/ru/`. Также доступны `/en/` и `/cs/`.
+
+Для диагностики:
+
+```bash
+cd /opt/art-project
+docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml logs --tail=100 web
+```
+
+Конфигурация публикует HTTP на порту 80. HTTPS требует отдельной настройки TLS.

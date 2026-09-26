@@ -1,0 +1,54 @@
+---
+import type { Language } from '../data/content';
+import { interfaceText } from '../data/interface';
+const { lang } = Astro.props as { lang: Language };
+const t = interfaceText[lang];
+const projects = ['smart', 'solar', 'heat', 'electrical'];
+---
+<div class="comparison-carousel" data-comparison>
+  <div class="comparison-stage">
+    {projects.map((project, index) => (
+      <div class="comparison-scene" data-scene={index} hidden={index !== 0}>
+        <img src={`/images/comparison-${project}-after.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.after}`} loading="lazy" decoding="async" />
+        <img class="comparison-layer" src={`/images/comparison-${project}-before.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.before}`} loading="lazy" decoding="async" />
+      </div>
+    ))}
+    <span class="comparison-divider" aria-hidden="true"><span>‹ ›</span></span>
+    <label class="sr-only" for="comparison-range">{t.comparison}</label>
+    <input id="comparison-range" class="comparison-range" type="range" min="0" max="100" value="50" />
+  </div>
+  <div class="comparison-navigation">
+    <button class="arrow" type="button" data-project-step="-1" aria-label={t.previous}>←</button>
+    <p class="sr-only" aria-live="polite" data-project-name data-names={JSON.stringify(t.projects)}>{t.projects[0]}</p>
+    <button class="arrow" type="button" data-project-step="1" aria-label={t.next}>→</button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('astro:page-load', () => {
+    if (!matchMedia('(max-width: 640px)').matches) return;
+    const root = document.querySelector('[data-comparison]');
+    root?.querySelectorAll<HTMLElement>('[data-scene]').forEach(scene => {
+      scene.hidden = scene.dataset.scene !== '2';
+    });
+    const name = root?.querySelector<HTMLElement>('[data-project-name]');
+    if (name?.dataset.names) name.textContent = JSON.parse(name.dataset.names)[2];
+  });
+  document.addEventListener('input', event => {
+    const range = event.target;
+    if (!(range instanceof HTMLInputElement) || !range.matches('.comparison-range')) return;
+    range.closest<HTMLElement>('[data-comparison]')?.style.setProperty('--split', `${range.value}%`);
+  });
+  document.addEventListener('click', event => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>('[data-project-step]');
+    const root = button?.closest<HTMLElement>('[data-comparison]');
+    if (!root || !button) return;
+    const scenes = [...root.querySelectorAll<HTMLElement>('[data-scene]')];
+    const current = scenes.findIndex(scene => !scene.hidden);
+    const index = (current + Number(button.dataset.projectStep) + scenes.length) % scenes.length;
+    scenes.forEach((scene, i) => { scene.hidden = i !== index; });
+    const name = root.querySelector<HTMLElement>('[data-project-name]');
+    if (name?.dataset.names) name.textContent = JSON.parse(name.dataset.names)[index];
+  });
+</script>
