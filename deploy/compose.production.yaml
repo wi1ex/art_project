@@ -1,0 +1,21 @@
+services:
+  web:
+    image: ${APP_IMAGE:?APP_IMAGE must reference a release image}
+    ports:
+      - "80:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    cpus: 1.0
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

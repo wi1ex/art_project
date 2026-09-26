@@ -1,0 +1,14 @@
+.idea/
+.venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.astro/
+.npm-cache/
+design-preview.png
+artifacts/
+test-results/
+playwright-report/

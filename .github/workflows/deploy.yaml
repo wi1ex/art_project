@@ -1,0 +1,101 @@
+name: Check and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ASTRO_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e -- --workers=2
+      - run: bash tests/deploy-release.sh
+      - name: Build and smoke-test release image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t "art-project:$GITHUB_SHA" .
+          export APP_IMAGE="art-project:$GITHUB_SHA"
+          docker compose -p smoke -f deploy/compose.production.yaml up -d --wait --wait-timeout 90
+          for language in ru en cs; do
+            curl --fail --silent --show-error "http://127.0.0.1/$language/" > /dev/null
+          done
+          docker compose -p smoke -f deploy/compose.production.yaml down
+          mkdir -p release
+          docker save "art-project:$GITHUB_SHA" | gzip -1 > release/image.tar.gz
+          cp deploy/compose.production.yaml deploy/release.sh release/
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: release-${{ github.sha }}
+          path: release/
+          retention-days: 3
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: release
+      - name: Deploy over verified SSH
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$latest" != "$GITHUB_SHA" ]]; then
+            echo 'Skipping an outdated commit; a newer main commit exists.'
+            exit 0
+          fi
+          : "${DEPLOY_HOST:?Set DEPLOY_HOST in production secrets}"
+          : "${DEPLOY_USER:?Set DEPLOY_USER in production secrets}"
+          : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY in production secrets}"
+          : "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS in production secrets}"
+          DEPLOY_PORT=${DEPLOY_PORT:-22}
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]
+          (( DEPLOY_PORT >= 1 && DEPLOY_PORT <= 65535 ))
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+          trap 'rm -f "$HOME/.ssh/deploy_key"' EXIT
+          ssh_options=(-i "$HOME/.ssh/deploy_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          remote="/opt/art-project/incoming/$GITHUB_SHA"
+          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "mkdir -p '$remote'"
+          scp "${ssh_options[@]}" -P "$DEPLOY_PORT" release/* "$target:$remote/"
+          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "bash '$remote/release.sh' '$GITHUB_SHA'"

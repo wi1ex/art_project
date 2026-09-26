@@ -1,0 +1,17 @@
+.git
+.idea
+node_modules
+.npm-cache
+dist
+.astro
+artifacts
+design-preview.png
+test-results
+playwright-report
+.env
+.env.*
+.github
+tests
+scripts
+README.md
+docs
