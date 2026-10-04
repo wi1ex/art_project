@@ -84,7 +84,8 @@ class RuntimeConfigTests(unittest.TestCase):
     def test_compose_round_trip_preserves_password_punctuation(self):
         if shutil.which('docker') is None:
             self.skipTest('Docker Compose CLI is not installed')
-        passwords = ['$HOME ${PASSWORD} $$"quoted"', 'heslo # česky $(echo nope) `echo nope`']
+        passwords = ['12345678', '$HOME ${PASSWORD} $$"quoted"',
+                     'heslo # česky $(echo nope) `echo nope`']
         for password in passwords:
             with self.subTest(password=password), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
@@ -99,11 +100,14 @@ class RuntimeConfigTests(unittest.TestCase):
                 environment = dict(os.environ, DOCKER_CONFIG=str(directory))
                 result = subprocess.run(
                     ['docker', '--config', str(directory), 'compose', '-f',
-                     str(directory / 'compose.yaml'), 'config', '--no-interpolate', '--format', 'json'],
+                     str(directory / 'compose.yaml'), 'config', '--format', 'json'],
                     capture_output=True, text=True, encoding='utf-8', env=environment, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 actual = json.loads(result.stdout)['services']['check']['environment']
-                self.assertEqual(actual, values)
+                # Normal config resolves env_file across Compose versions. Its JSON
+                # output doubles literal dollars so the rendered model can be reused.
+                expected = {key: value.replace('$', '$$') for key, value in values.items()}
+                self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__':
