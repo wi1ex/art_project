@@ -1,0 +1,53 @@
+---
+// Preserve the geometry of the supplied SVG exports.
+const icons = {
+  "arrow": {
+    "viewBox": "0 0 26 25",
+    "body": "<path d=\"M5 13H19\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M13 6L21 13L13 20\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "arrow-control": {
+    "viewBox": "0 0 27 31",
+    "body": "<path d=\"M4 16H23\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M14 7L24 16L14 25\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "arrow-prev": {
+    "viewBox": "0 0 27 31",
+    "body": "<path d=\"M24 16H5\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M14 7L4 16L14 25\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "arrow-submit": {
+    "viewBox": "0 0 28 28",
+    "body": "<path d=\"M5.63281 13.5234H21.4093\" stroke=\"currentColor\" stroke-width=\"2.25379\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M13.5234 5.63281L21.4117 13.5211L13.5234 21.4093\" stroke=\"currentColor\" stroke-width=\"2.25379\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "chevron": {
+    "viewBox": "0 0 30 30",
+    "body": "<path d=\"M11.5 23L19.5 15.5L11.5 8\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "chevron-prev": {
+    "viewBox": "0 0 30 30",
+    "body": "<path d=\"M19.5 22L11.5 14.5L19.5 7\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "check": {
+    "viewBox": "0 0 29 29",
+    "body": "<path d=\"M25.7584 11.6041C26.3064 14.2936 25.9158 17.0898 24.6518 19.5262C23.3877 21.9627 21.3266 23.8921 18.8122 24.9928C16.2977 26.0936 13.4819 26.299 10.8343 25.5749C8.18675 24.8508 5.86742 23.2409 4.26312 21.0138C2.65882 18.7866 1.86654 16.0768 2.01839 13.3361C2.17024 10.5955 3.25704 7.98979 5.09757 5.95349C6.93809 3.91719 9.42108 2.57341 12.1325 2.14623C14.8438 1.71906 17.6197 2.23432 19.9972 3.60609\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M11 13.4L14.6923 17L27 5\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "award": {
+    "viewBox": "0 0 29 29",
+    "body": "<path d=\"M18.5 16.5455L19.9916 27.2316C20.012 27.3638 19.9951 27.4997 19.9431 27.6212C19.8912 27.7426 19.8067 27.8437 19.701 27.911C19.5953 27.9784 19.4734 28.0086 19.3516 27.9979C19.2297 27.9871 19.1138 27.9357 19.0193 27.8507L14.7219 24.311C14.5145 24.141 14.2624 24.0491 14.0035 24.0491C13.7445 24.0491 13.4925 24.141 13.2851 24.311L8.98047 27.8494C8.88603 27.9343 8.77024 27.9855 8.64856 27.9963C8.52688 28.0071 8.4051 27.9769 8.29945 27.9098C8.1938 27.8427 8.10932 27.7418 8.05728 27.6206C8.00523 27.4994 7.9881 27.3637 8.00816 27.2316L9.82554 16\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n<path d=\"M14.4998 16.9577C18.5718 16.9577 21.8727 13.6567 21.8727 9.58479C21.8727 5.51287 18.5718 2.21191 14.4998 2.21191C10.4279 2.21191 7.12695 5.51287 7.12695 9.58479C7.12695 13.6567 10.4279 16.9577 14.4998 16.9577Z\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />\n"
+  },
+  "star": {
+    "viewBox": "0 0 28 28",
+    "body": "<path d=\"M14 5L17.09 11.2534L24 12.2624L19 17.1272L20.18 24L14 20.7534L7.82 24L9 17.1272L4 12.2624L10.91 11.2534L14 5Z\" fill=\"currentColor\" />\n"
+  },
+  "menu": {
+    "viewBox": "0 0 24 24",
+    "body": "<path d=\"M3 5h18M3 12h18M3 19h18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" />"
+  },
+  "building": {
+    "viewBox": "0 0 24 24",
+    "body": "<path d=\"M5 21V3h10v18M15 9h4v12H3V9h2M8 7h4M8 11h4M8 15h4M8 19h4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" />"
+  }
+} as const;
+type IconName = keyof typeof icons;
+const { name, class: className } = Astro.props as { name: IconName; class?: string };
+const icon = icons[name];
+---
+<svg class:list={['icon', className]} viewBox={icon.viewBox} fill="none" aria-hidden="true" set:html={icon.body} />

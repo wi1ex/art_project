@@ -1,0 +1,54 @@
+---
+import { content, languages, type Language } from '../data/content';
+import { company } from '../data/company';
+import { footerText } from '../data/footer';
+import LeadForm from './LeadForm.astro';
+import MessengerLinks from './MessengerLinks.astro';
+import '../styles/footer.css';
+
+const { lang } = Astro.props as { lang: Language };
+const t = footerText[lang];
+const languageNames = { cs: 'Čeština', en: 'English', ru: 'Русский' };
+---
+<footer class="site-footer">
+  <div class="footer-grid footer-container">
+    <div class="footer-request">
+      <p class="footer-request-title">{t.request}</p>
+      <LeadForm lang={lang} variant="footer" />
+    </div>
+    <nav class="footer-column footer-services" aria-labelledby="footer-services-heading">
+      <h2 id="footer-services-heading">{t.servicesHeading}</h2>
+      <ul>{t.services.map(label => <li><a href="#services">{label}</a></li>)}</ul>
+    </nav>
+    <div class="footer-details">
+      <nav class="footer-column footer-company" aria-labelledby="footer-company-heading">
+        <h2 id="footer-company-heading">{t.companyHeading}</h2>
+        <ul>{t.company.map(([label, href]) => <li><a href={href}>{label}</a></li>)}</ul>
+      </nav>
+      <div class="footer-column footer-projects">
+        <nav aria-labelledby="footer-projects-heading">
+          <h2 id="footer-projects-heading">{t.projectsHeading}</h2>
+          <ul>{t.projects.map(label => <li><a href="#portfolio">{label}</a></li>)}</ul>
+        </nav>
+        <nav class="footer-languages" aria-label={t.languageHeading}>
+          {languages.map(code => <a href={`/${code}/`} lang={code} aria-current={code === lang ? 'page' : undefined}>{languageNames[code]}</a>)}
+        </nav>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom-wrap">
+    <div class="footer-bottom footer-container">
+      <div class="footer-contacts">
+        <a href={`/${lang}/`} class="brand footer-brand" aria-label="ART PROJECT"><img src="/images/logo-light.svg" alt="" width="42" height="36" /><span>ART<br />PROJECT</span></a>
+        <a class="footer-phone" href={company.telephone}>{company.phone}</a>
+        <a class="footer-email" href={`mailto:${company.email}`}>{company.email}</a>
+        <p class="footer-address">{company.address[lang]}</p>
+      </div>
+      <div class="footer-legal">
+        <small>© {new Date().getFullYear()}, ART Project. {content[lang].rights}</small>
+        <a class="geo-attribution" href="https://db-ip.com">IP Geolocation by DB-IP</a>
+      </div>
+      <div class="footer-messengers"><MessengerLinks lang={lang} compact /></div>
+    </div>
+  </div>
+</footer>

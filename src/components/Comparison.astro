@@ -1,6 +1,7 @@
 ---
 import type { Language } from '../data/content';
 import { interfaceText } from '../data/interface';
+import Icon from './Icon.astro';
 const { lang } = Astro.props as { lang: Language };
 const t = interfaceText[lang];
 const projects = ['smart', 'solar', 'heat', 'electrical'];
@@ -13,14 +14,14 @@ const projects = ['smart', 'solar', 'heat', 'electrical'];
         <img class="comparison-layer" src={`/images/comparison-${project}-before.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.before}`} loading="lazy" decoding="async" />
       </div>
     ))}
-    <span class="comparison-divider" aria-hidden="true"><span>‹ ›</span></span>
+    <span class="comparison-divider" aria-hidden="true"><span><Icon name="chevron-prev" /><Icon name="chevron" /></span></span>
     <label class="sr-only" for="comparison-range">{t.comparison}</label>
     <input id="comparison-range" class="comparison-range" type="range" min="0" max="100" value="50" />
   </div>
   <div class="comparison-navigation">
-    <button class="arrow" type="button" data-project-step="-1" aria-label={t.previous}>←</button>
+    <button class="arrow" type="button" data-project-step="-1" aria-label={t.previous}><Icon name="arrow-prev" /></button>
     <p class="sr-only" aria-live="polite" data-project-name data-names={JSON.stringify(t.projects)}>{t.projects[0]}</p>
-    <button class="arrow" type="button" data-project-step="1" aria-label={t.next}>→</button>
+    <button class="arrow" type="button" data-project-step="1" aria-label={t.next}><Icon name="arrow-control" /></button>
   </div>
 </div>
 
@@ -28,6 +29,8 @@ const projects = ['smart', 'solar', 'heat', 'electrical'];
   document.addEventListener('astro:page-load', () => {
     if (!matchMedia('(max-width: 640px)').matches) return;
     const root = document.querySelector('[data-comparison]');
+    const range = root?.querySelector<HTMLInputElement>('.comparison-range');
+    if (range) { range.value = '64'; (root as HTMLElement).style.setProperty('--split', '64%'); }
     root?.querySelectorAll<HTMLElement>('[data-scene]').forEach(scene => {
       scene.hidden = scene.dataset.scene !== '2';
     });

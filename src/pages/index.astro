@@ -1,4 +1,79 @@
 ---
+import { languages } from '../data/content';
+const languageNames = { cs: 'Čeština', en: 'English', ru: 'Русский' };
 ---
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><meta http-equiv="refresh" content="0;url=/ru/" /><meta name="robots" content="noindex" /><title>ART PROJECT</title></head><body><a href="/ru/">Русский</a> · <a href="/en/">English</a> · <a href="/cs/">Čeština</a></body></html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>ART PROJECT — choose your language</title>
+  </head>
+  <body>
+    <main>
+      <p class="brand">ART PROJECT</p>
+      <h1>Choose your language</h1>
+      <nav aria-label="Language">
+        {languages.map(lang => <a href={`/${lang}/`} lang={lang}>{languageNames[lang]}</a>)}
+      </nav>
+      <p class="default"><a href="/en/" lang="en">Continue in English →</a></p>
+      <p class="geo-attribution"><a href="https://db-ip.com">IP Geolocation by DB-IP</a></p>
+    </main>
+    <script>
+      import { languages, type Language } from '../data/content';
+      const storageKey = 'art-project-language';
+      const isLanguage = (value: unknown): value is Language => typeof value === 'string' && languages.some(lang => lang === value);
+      let manualSelection = false;
+      const controller = new AbortController();
+
+      document.addEventListener('click', event => {
+        if (!(event.target instanceof Element)) return;
+        const language = event.target.closest<HTMLAnchorElement>('a[lang]')?.getAttribute('lang');
+        if (!isLanguage(language)) return;
+        manualSelection = true;
+        controller.abort();
+        try { localStorage.setItem(storageKey, language); } catch { /* Storage can be unavailable in private browsing. */ }
+      });
+
+      async function selectLanguage() {
+        if (location.pathname !== '/') return;
+        let language: Language = 'en';
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (isLanguage(saved)) {
+            location.replace(`/${saved}/${location.search}${location.hash}`);
+            return;
+          }
+        } catch { /* Region lookup still works when storage is unavailable. */ }
+        const timeout = window.setTimeout(() => controller.abort(), 1500);
+        try {
+          const response = await fetch('/api/locale', { signal: controller.signal, cache: 'no-store', credentials: 'same-origin' });
+          if (response.ok) {
+            const result: unknown = await response.json();
+            if (result && typeof result === 'object' && 'lang' in result && isLanguage(result.lang)) language = result.lang;
+          }
+        } catch { /* English is the fallback when the API is missing or slow. */ }
+        finally { clearTimeout(timeout); }
+        if (!manualSelection) location.replace(`/${language}/${location.search}${location.hash}`);
+      }
+      void selectLanguage();
+    </script>
+  </body>
+</html>
+
+<style>
+  :global(body) { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; font: 16px/1.5 Arial, sans-serif; color: #1a1a1a; background: white; }
+  main { width: min(100%, 520px); }
+  .brand { font-weight: 700; letter-spacing: .08em; margin-bottom: 32px; }
+  h1 { font-size: clamp(24px, 5vw, 36px); font-weight: 500; }
+  nav { display: flex; flex-wrap: wrap; gap: 12px; }
+  nav a { padding: 12px 20px; border: 1px solid #cdd2da; border-radius: 6px; text-decoration: none; }
+  a { color: #4a5f31; }
+  a:focus-visible { outline: 3px solid #677d48; outline-offset: 4px; }
+  .default { margin-top: 28px; }
+  .geo-attribution { font-size: 11px; color: #7e8797; margin-top: 32px; }
+  .geo-attribution a { color: inherit; }
+</style>

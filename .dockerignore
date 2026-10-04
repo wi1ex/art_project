@@ -10,6 +10,17 @@ test-results
 playwright-report
 .env
 .env.*
+**/.env
+**/.env.*
+backend
+__pycache__
+**/__pycache__
+.venv
+**/.venv
+*.sqlite*
+**/*.sqlite*
+*.db
+**/*.db
 .github
 tests
 scripts

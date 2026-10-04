@@ -22,25 +22,50 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - run: python -m unittest discover -s backend/tests -v
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e -- --workers=2
       - run: bash tests/deploy-release.sh
-      - name: Build and smoke-test release image
+      - name: Build and smoke-test release images
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
           docker build -t "art-project:$GITHUB_SHA" .
+          docker build -f backend/Dockerfile -t "art-project-api:$GITHUB_SHA" backend
           export APP_IMAGE="art-project:$GITHUB_SHA"
+          export API_IMAGE="art-project-api:$GITHUB_SHA"
+          export API_ENV_FILE="$RUNNER_TEMP/art-project-smoke.env"
+          export GEOIP_DIRECTORY="$RUNNER_TEMP/art-project-smoke-geoip"
+          mkdir -p "$GEOIP_DIRECTORY"
+          printf 'LEADS_ENABLED=false\nLEADS_ALLOWED_ORIGINS=http://127.0.0.1\n' > "$API_ENV_FILE"
+          trap 'docker compose -p smoke -f deploy/compose.production.yaml down --volumes --remove-orphans; rm -f "$API_ENV_FILE"' EXIT
           docker compose -p smoke -f deploy/compose.production.yaml up -d --wait --wait-timeout 90
           for language in ru en cs; do
             curl --fail --silent --show-error "http://127.0.0.1/$language/" > /dev/null
           done
-          docker compose -p smoke -f deploy/compose.production.yaml down
+          curl --fail --silent --show-error http://127.0.0.1/api/healthz |
+            python -c 'import json, sys; result = json.load(sys.stdin); assert result["status"] == "ok" and result["accepting_leads"] is False'
+          curl --fail --silent --show-error http://127.0.0.1/api/locale |
+            python -c 'import json, sys; assert json.load(sys.stdin)["lang"] == "en"'
+          status=$(curl --silent --show-error --output "$RUNNER_TEMP/leads-response.json" --write-out '%{http_code}' \
+            -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1' \
+            --data '{"phone":"+420774411158","consent":true,"request_id":"1b2fb96e-3456-4531-8ccc-6226df6ed560","website":""}' \
+            http://127.0.0.1/api/leads)
+          [[ "$status" == 503 ]]
+          docker compose -p smoke -f deploy/compose.production.yaml down --volumes --remove-orphans
+          rm -f "$API_ENV_FILE"
+          trap - EXIT
           mkdir -p release
-          docker save "art-project:$GITHUB_SHA" | gzip -1 > release/image.tar.gz
+          docker save "art-project:$GITHUB_SHA" "art-project-api:$GITHUB_SHA" | gzip -1 > release/image.tar.gz
           cp deploy/compose.production.yaml deploy/release.sh release/
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

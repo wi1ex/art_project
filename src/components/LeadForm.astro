@@ -1,0 +1,255 @@
+---
+import { content, type Language } from '../data/content';
+import { company } from '../data/company';
+import { formText } from '../data/form';
+import Icon from './Icon.astro';
+const { lang, variant = 'contact' } = Astro.props as { lang: Language; variant?: 'contact' | 'footer' };
+const t = content[lang];
+const messages = formText[lang];
+const isFooter = variant === 'footer';
+const phoneId = isFooter ? 'footer-phone' : 'phone';
+const statusId = isFooter ? 'footer-form-status' : 'form-status';
+const websiteId = isFooter ? 'footer-lead-website' : 'lead-website';
+const phonePlaceholder = { ru: 'Введите телефон', en: 'Enter phone number', cs: 'Zadejte telefonní číslo' }[lang];
+---
+<div class={isFooter ? 'lead-form-footer' : 'contact-form'}>
+  {!isFooter && <><h2>{t.contactTitle}</h2><p class="muted">{t.contactIntro}</p></>}
+  <form data-lead-form data-lead-variant={variant} data-messages={JSON.stringify(messages)} aria-describedby={statusId} novalidate>
+    {isFooter ? <div class="lead-phone-row">
+      <label class="sr-only" for={phoneId}>{t.phone}</label>
+      <input class="lead-phone" type="tel" id={phoneId} name="phone" autocomplete="tel" inputmode="tel" placeholder={phonePlaceholder} aria-label={t.phone} maxlength="40" required aria-describedby={statusId} disabled />
+      <button class="lead-submit" type="submit" aria-label={t.submit} title={t.submit} disabled><Icon name="arrow-submit" /></button>
+    </div> : <>
+      <label for={phoneId}>{t.phone}</label>
+      <input type="tel" id={phoneId} name="phone" autocomplete="tel" inputmode="tel" placeholder="+420" maxlength="40" required aria-describedby={statusId} disabled />
+    </>}
+    <label class="consent"><input type="checkbox" name="consent" required disabled />{t.consent}</label>
+    <div class="lead-honeypot" aria-hidden="true"><label for={websiteId}>Website</label><input id={websiteId} name="website" type="text" tabindex="-1" autocomplete="off" /></div>
+    {!isFooter && <button class="button olive" type="submit" disabled>{t.submit}</button>}
+    <p class="form-status" id={statusId} role="status" aria-live="polite" aria-atomic="true">{messages.noJavaScript}</p>
+    {!isFooter && <p class="form-direct-contact"><a href={company.telephone}>{company.phone}</a></p>}
+  </form>
+</div>
+
+<script>
+  import type { FormText } from '../data/form';
+
+  type FormVariant = 'contact' | 'footer';
+  type FormController = {
+    dispose: () => void;
+    setReady: (ready: boolean) => void;
+    refreshSharedState: () => void;
+  };
+  const activeForms = new Map<HTMLFormElement, FormController>();
+  let healthLifecycle: AbortController | undefined;
+  // Keep each form's uncertain request ID through ClientRouter language changes.
+  const attempts = new Map<FormVariant, { phone: string; id: string }>();
+  const acceptedPhones = new Set<string>();
+  const inFlightPhones = new Map<string, HTMLFormElement>();
+
+  const normalizePhone = (value: string) => value.replace(/[\s()-]/g, '');
+  const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+  const makeRequestId = () => {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    // getRandomValues also works on the temporary server's HTTP origin.
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
+
+  async function requestJson(path: string, lifecycle: AbortSignal, options: RequestInit = {}) {
+    const request = new AbortController();
+    const abort = () => request.abort();
+    lifecycle.addEventListener('abort', abort, { once: true });
+    if (lifecycle.aborted) abort();
+    const timeout = window.setTimeout(abort, 12000);
+    try {
+      const response = await fetch(path, { ...options, signal: request.signal, cache: 'no-store', credentials: 'same-origin' });
+      const body: unknown = await response.json();
+      return { response, body };
+    } finally {
+      clearTimeout(timeout);
+      lifecycle.removeEventListener('abort', abort);
+    }
+  }
+
+  function refreshForms() {
+    activeForms.forEach(controller => controller.refreshSharedState());
+  }
+
+  function initializeForm(form: HTMLFormElement): FormController {
+    const variant: FormVariant = form.dataset.leadVariant === 'footer' ? 'footer' : 'contact';
+    const messages = JSON.parse(form.dataset.messages ?? '{}') as FormText;
+    const phone = form.querySelector<HTMLInputElement>('[name="phone"]')!;
+    const consent = form.querySelector<HTMLInputElement>('[name="consent"]')!;
+    const website = form.querySelector<HTMLInputElement>('[name="website"]')!;
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const status = form.querySelector<HTMLElement>('[role="status"]')!;
+    const lifecycle = new AbortController();
+    const isCurrent = () => !lifecycle.signal.aborted && form.isConnected;
+    let ready = false;
+    let pending = false;
+    let pendingPhone: string | undefined;
+    let waitingForOther = false;
+    let cooldownUntil = 0;
+    let cooldownTimer: number | undefined;
+
+    const showStatus = (text: string, state: 'ready' | 'error' | 'success' | 'pending' = 'ready') => {
+      status.textContent = text;
+      status.dataset.state = state;
+    };
+    const updateControls = () => {
+      const normalized = normalizePhone(phone.value);
+      const sharedPending = inFlightPhones.has(normalized);
+      phone.disabled = consent.disabled = !ready || pending;
+      button.disabled = !ready || pending || sharedPending || acceptedPhones.has(normalized) || Date.now() < cooldownUntil;
+      form.setAttribute('aria-busy', String(pending || sharedPending));
+    };
+    const refreshSharedState = () => {
+      if (!isCurrent()) return;
+      const normalized = normalizePhone(phone.value);
+      if (acceptedPhones.has(normalized)) {
+        waitingForOther = false;
+        showStatus(messages.accepted, 'success');
+      } else if (inFlightPhones.has(normalized) && inFlightPhones.get(normalized) !== form) {
+        waitingForOther = true;
+        showStatus(messages.pending, 'pending');
+      } else if (waitingForOther) {
+        waitingForOther = false;
+        showStatus(ready ? messages.ready : messages.unavailable, ready ? 'ready' : 'error');
+      }
+      updateControls();
+    };
+    const dispose = () => {
+      lifecycle.abort();
+      clearTimeout(cooldownTimer);
+      if (pendingPhone && inFlightPhones.get(pendingPhone) === form) inFlightPhones.delete(pendingPhone);
+    };
+
+    phone.addEventListener('input', () => {
+      const normalized = normalizePhone(phone.value);
+      if (attempts.get(variant)?.phone !== normalized) attempts.delete(variant);
+      phone.removeAttribute('aria-invalid');
+      if (Date.now() >= cooldownUntil) showStatus(messages.ready);
+      refreshSharedState();
+    }, { signal: lifecycle.signal });
+    consent.addEventListener('change', () => consent.removeAttribute('aria-invalid'), { signal: lifecycle.signal });
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const normalized = normalizePhone(phone.value);
+      if (!ready || pending || acceptedPhones.has(normalized) || inFlightPhones.has(normalized) || Date.now() < cooldownUntil) return;
+      if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
+        phone.setAttribute('aria-invalid', 'true');
+        showStatus(messages.invalidPhone, 'error');
+        phone.focus();
+        return;
+      }
+      if (!consent.checked) {
+        consent.setAttribute('aria-invalid', 'true');
+        showStatus(messages.consentRequired, 'error');
+        consent.focus();
+        return;
+      }
+      let attempt = attempts.get(variant);
+      if (attempt?.phone !== normalized) {
+        // Reuse an uncertain request when the same number moves to the other form.
+        attempt = Array.from(attempts.values()).find(previous => previous.phone === normalized)
+          ?? { phone: normalized, id: makeRequestId() };
+        attempts.set(variant, attempt);
+      }
+      const requestId = attempt.id;
+      pending = true;
+      pendingPhone = normalized;
+      inFlightPhones.set(normalized, form);
+      showStatus(messages.pending, 'pending');
+      refreshForms();
+      try {
+        const { response, body } = await requestJson('/api/leads', lifecycle.signal, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: normalized, consent: true, request_id: requestId, website: website.value }),
+        });
+        if (!isCurrent()) return;
+        if ((response.status === 200 || response.status === 202) && isObject(body) && body.status === 'accepted' && body.request_id === requestId) {
+          acceptedPhones.add(normalized);
+          showStatus(messages.accepted, 'success');
+          refreshForms();
+        } else {
+          const error = isObject(body) ? body.error : undefined;
+          if (error === 'invalid_phone') {
+            phone.setAttribute('aria-invalid', 'true');
+            showStatus(messages.invalidPhone, 'error');
+          } else if (error === 'consent_required') {
+            consent.setAttribute('aria-invalid', 'true');
+            showStatus(messages.consentRequired, 'error');
+          } else if (response.status === 429 || error === 'rate_limited') {
+            const retryAfter = response.headers.get('Retry-After');
+            const seconds = retryAfter && /^\d+$/.test(retryAfter) ? Math.min(Number(retryAfter), 86400) : 60;
+            cooldownUntil = Date.now() + seconds * 1000;
+            showStatus(`${messages.rateLimited} ${messages.retryIn.replace('{seconds}', String(seconds))}`, 'error');
+            clearTimeout(cooldownTimer);
+            cooldownTimer = window.setTimeout(() => {
+              if (isCurrent()) { showStatus(messages.ready); refreshSharedState(); }
+            }, seconds * 1000);
+          } else if (error === 'unavailable' || response.status === 503) {
+            showStatus(messages.unavailable, 'error');
+          } else if (error === 'conflict' || error === 'invalid_request' || error === 'forbidden') {
+            showStatus(messages.invalidRequest, 'error');
+          } else {
+            showStatus(messages.networkError, 'error');
+          }
+        }
+      } catch {
+        if (isCurrent()) showStatus(messages.networkError, 'error');
+      } finally {
+        if (inFlightPhones.get(normalized) === form) inFlightPhones.delete(normalized);
+        if (isCurrent()) pending = false;
+        refreshForms();
+      }
+    }, { signal: lifecycle.signal });
+
+    showStatus(messages.checking);
+    updateControls();
+    return {
+      dispose,
+      refreshSharedState,
+      setReady(value) {
+        if (!isCurrent()) return;
+        ready = value;
+        showStatus(ready ? messages.ready : messages.unavailable, ready ? 'ready' : 'error');
+        refreshSharedState();
+      },
+    };
+  }
+
+  function disposeForms() {
+    healthLifecycle?.abort();
+    activeForms.forEach(controller => controller.dispose());
+    activeForms.clear();
+  }
+
+  function initializeForms() {
+    const forms = Array.from(document.querySelectorAll<HTMLFormElement>('[data-lead-form]'));
+    if (forms.length === activeForms.size && forms.every(form => activeForms.has(form))) return;
+    disposeForms();
+    if (!forms.length) return;
+    forms.forEach(form => activeForms.set(form, initializeForm(form)));
+    const health = new AbortController();
+    healthLifecycle = health;
+    // One availability request enables both forms on each page initialization.
+    void requestJson('/api/healthz', health.signal).then(({ response, body }) => {
+      if (health.signal.aborted) return;
+      const ready = response.ok && isObject(body) && body.status === 'ok' && body.accepting_leads === true;
+      activeForms.forEach(controller => controller.setReady(ready));
+    }).catch(() => {
+      if (!health.signal.aborted) activeForms.forEach(controller => controller.setReady(false));
+    });
+  }
+
+  document.addEventListener('astro:before-swap', disposeForms);
+  document.addEventListener('astro:page-load', initializeForms);
+  initializeForms();
+</script>
