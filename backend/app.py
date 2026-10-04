@@ -12,13 +12,11 @@ from dataclasses import dataclass
 from uuid import UUID
 
 import httpx
-import maxminddb
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.storage import Capacity, Conflict, Store
-from backend.telegram import TelegramSender
-from backend.geoip import CountryLookup
+from backend.telegram import TelegramBot, TelegramSender
 
 logger = logging.getLogger('leads')
 # httpx info logging contains the full bot-token URL.
@@ -30,28 +28,27 @@ logging.getLogger('httpcore').setLevel(logging.CRITICAL)
 class Settings:
     enabled: bool = False
     telegram_token: str = ''
-    telegram_chat_id: str = ''
     allowed_origins: tuple[str, ...] = ()
     database_path: str = '/data/leads.sqlite3'
     retention_days: int = 7
     retry_seconds: int = 30
     start_worker: bool = True
-    geoip_database_path: str = '/geoip/country.mmdb'
+    admin_password: str = '12345678'
 
     @classmethod
     def from_env(cls):
         return cls(
             enabled=os.environ.get('LEADS_ENABLED', '').lower() == 'true',
             telegram_token=os.environ.get('TELEGRAM_BOT_TOKEN', '').strip(),
-            telegram_chat_id=os.environ.get('TELEGRAM_CHAT_ID', '').strip(),
             allowed_origins=tuple(value.strip().rstrip('/') for value in os.environ.get('LEADS_ALLOWED_ORIGINS', '').split(',') if value.strip()),
             database_path=os.environ.get('DATABASE_PATH', '/data/leads.sqlite3'),
-            geoip_database_path=os.environ.get('GEOIP_DATABASE_PATH', '/geoip/country.mmdb'),
+            retry_seconds=max(1, int(os.environ.get('TELEGRAM_RETRY_SECONDS', '300'))),
+            admin_password=os.environ.get('TELEGRAM_ADMIN_PASSWORD', '').strip() or '12345678',
         )
 
     @property
     def accepting(self):
-        return bool(self.enabled and self.telegram_token and self.telegram_chat_id and self.allowed_origins)
+        return bool(self.enabled and self.telegram_token and self.allowed_origins)
 
 
 class RateLimit:
@@ -83,6 +80,17 @@ class Dispatcher:
         self.store, self.sender, self.settings = store, sender, settings
         self.lock = asyncio.Lock()
         self.uncommitted = None
+        self.uncommitted_delivery = None
+        self.active_row = None
+        self.storage_failed = False
+
+    def commit_delivery(self):
+        try:
+            self.store.finish_delivery(*self.uncommitted_delivery)
+        except sqlite3.Error:
+            self.storage_failed = True
+            raise
+        self.uncommitted_delivery = None
         self.storage_failed = False
 
     def commit_result(self):
@@ -94,25 +102,55 @@ class Dispatcher:
             raise
         self.storage_failed = False
         self.uncommitted = None
+        self.active_row = None
+        stored = self.store.get(request_id)
+        if stored:
+            state, code = stored['state'], stored['error_code']
+        delivered = ','.join(self.store.delivered_chats(request_id))
         logger.log(logging.INFO if state == 'sent' else logging.WARNING,
-                   'Lead %s: %s (%s)', request_id, state, code)
+                   'Lead %s: %s (%s), delivered_to=%s', request_id, state, code, delivered)
 
     async def dispatch_once(self):
         async with self.lock:
-            # Retrying a failed SQLite completion must never re-send to Telegram.
+            # Retrying a failed lead completion must never re-send Telegram
+            # deliveries that were already committed as sent.
             if self.uncommitted:
                 self.commit_result()
                 return True
-            row = self.store.claim()
+            # Keep a Telegram result in memory until SQLite confirms it. A
+            # transient commit failure must retry this write, not send again.
+            if self.uncommitted_delivery:
+                self.commit_delivery()
+            row = self.active_row or self.store.claim()
             if not row:
                 return False
+            self.active_row = row
             try:
-                state, delay, code = await self.sender.send(row)
+                for delivery in self.store.due_deliveries(row['request_id']):
+                    claimed = self.store.claim_delivery(row['request_id'], delivery['chat_id'])
+                    if not claimed:
+                        continue
+                    try:
+                        state, delay, code = await self.sender.send_one(row, delivery['chat_id'])
+                    except Exception:
+                        state, delay, code = 'pending', max(300, self.settings.retry_seconds), 'unexpected_delivery_error'
+                    self.uncommitted_delivery = row['request_id'], delivery['chat_id'], state, delay, code
+                    self.commit_delivery()
+                if self.store.all_delivered(row['request_id']):
+                    state, delay, code = 'sent', 0, ''
+                elif self.store.all_resolved(row['request_id']):
+                    state, delay, code = 'cancelled', 0, 'admin_logged_out'
+                else:
+                    state = 'pending'
+                    delay = self.store.next_delivery_delay(
+                        row['request_id'], default=max(300, self.settings.retry_seconds)
+                    )
+                    code = 'no_authenticated_admin' if not self.store.delivery_rows(row['request_id']) else 'delivery_pending'
+            except sqlite3.Error:
+                self.storage_failed = True
+                raise
             except Exception:
-                state, delay, code = 'unknown', 0, 'unexpected_delivery_error'
-            # Exponential reconnect backoff, bounded to fifteen minutes.
-            if state == 'pending' and code == 'connection_unavailable':
-                delay = min(900, delay * 2 ** min(row['attempts'], 5))
+                state, delay, code = 'pending', max(300, self.settings.retry_seconds), 'unexpected_delivery_error'
             self.uncommitted = row['request_id'], state, delay, code
             self.commit_result()
             return True
@@ -137,32 +175,36 @@ def normalize_phone(value):
     return phone if re.fullmatch(r'\+[1-9][0-9]{7,14}', phone) else None
 
 
-def create_app(settings: Settings | None = None, transport=None, country_lookup=None):
+def create_app(settings: Settings | None = None, transport=None):
     settings = settings or Settings.from_env()
     limiter = RateLimit()
 
     @asynccontextmanager
     async def lifespan(app):
         store = Store(settings.database_path)
-        lookup = country_lookup if country_lookup is not None else CountryLookup(settings.geoip_database_path)
-        app.state.country_lookup = lookup
         async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(10, connect=5),
                                     follow_redirects=False, trust_env=False) as client:
-            dispatcher = Dispatcher(store, TelegramSender(settings, client), settings)
+            sender = TelegramSender(settings, client)
+            dispatcher = Dispatcher(store, sender, settings)
             app.state.store, app.state.dispatcher = store, dispatcher
-            task = asyncio.create_task(dispatcher.run()) if settings.accepting and settings.start_worker else None
+            tasks = []
+            if settings.accepting and settings.start_worker:
+                tasks.append(asyncio.create_task(dispatcher.run()))
+            # Telegram administration works without a configured fixed chat ID;
+            # authenticated private chats become recipients in the outbox.
+            if settings.telegram_token and settings.start_worker:
+                tasks.append(asyncio.create_task(TelegramBot(settings, store, sender).run()))
             try:
                 yield
             finally:
-                if task:
+                for task in tasks:
                     task.cancel()
+                for task in tasks:
                     try:
                         await task
                     except asyncio.CancelledError:
                         pass
                 store.close()
-                if country_lookup is None:
-                    lookup.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -171,17 +213,10 @@ def create_app(settings: Settings | None = None, transport=None, country_lookup=
                             headers={'Cache-Control': 'no-store', **({'Retry-After': '600'} if status == 429 else {})})
 
     @app.get('/locale')
-    async def locale(request: Request):
-        address = request.headers.get('x-real-ip', request.client.host if request.client else '')
-        country = None
-        try:
-            parsed = ipaddress.ip_address(address)
-            if parsed.is_global:
-                country = app.state.country_lookup(str(parsed))
-        except (ValueError, OSError, RuntimeError, maxminddb.InvalidDatabaseError):
-            pass
-        return JSONResponse({'lang': {'CZ': 'cs', 'RU': 'ru'}.get(country, 'en')},
-                            headers={'Cache-Control': 'private, no-store'})
+    async def locale():
+        # Kept as a harmless compatibility endpoint for old probes.  The site
+        # now always starts in Czech and never performs a country lookup.
+        return JSONResponse({'lang': 'cs'}, headers={'Cache-Control': 'private, no-store'})
 
     @app.get('/healthz')
     async def health():
@@ -237,7 +272,7 @@ def create_app(settings: Settings | None = None, transport=None, country_lookup=
                     ip = 'unknown'
                 if not limiter.allow(ip):
                     return error('rate_limited', 429)
-                app.state.store.accept(request_id, phone)
+                app.state.store.accept(request_id, phone, admin_chats=app.state.store.admin_chats())
         except Conflict:
             return error('conflict', 409)
         except (Capacity, sqlite3.Error):

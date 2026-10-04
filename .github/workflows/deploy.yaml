@@ -34,6 +34,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e -- --workers=2
       - run: bash tests/deploy-release.sh
+      - run: python -m unittest discover -s tests -p 'test_runtime_config.py' -v
       - name: Build and smoke-test release images
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
@@ -44,8 +45,6 @@ jobs:
           export APP_IMAGE="art-project:$GITHUB_SHA"
           export API_IMAGE="art-project-api:$GITHUB_SHA"
           export API_ENV_FILE="$RUNNER_TEMP/art-project-smoke.env"
-          export GEOIP_DIRECTORY="$RUNNER_TEMP/art-project-smoke-geoip"
-          mkdir -p "$GEOIP_DIRECTORY"
           printf 'LEADS_ENABLED=false\nLEADS_ALLOWED_ORIGINS=http://127.0.0.1\n' > "$API_ENV_FILE"
           trap 'docker compose -p smoke -f deploy/compose.production.yaml down --volumes --remove-orphans; rm -f "$API_ENV_FILE"' EXIT
           docker compose -p smoke -f deploy/compose.production.yaml up -d --wait --wait-timeout 90
@@ -54,8 +53,6 @@ jobs:
           done
           curl --fail --silent --show-error http://127.0.0.1/api/healthz |
             python -c 'import json, sys; result = json.load(sys.stdin); assert result["status"] == "ok" and result["accepting_leads"] is False'
-          curl --fail --silent --show-error http://127.0.0.1/api/locale |
-            python -c 'import json, sys; assert json.load(sys.stdin)["lang"] == "en"'
           status=$(curl --silent --show-error --output "$RUNNER_TEMP/leads-response.json" --write-out '%{http_code}' \
             -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1' \
             --data '{"phone":"+420774411158","consent":true,"request_id":"1b2fb96e-3456-4531-8ccc-6226df6ed560","website":""}' \
@@ -84,6 +81,7 @@ jobs:
       group: production-deploy
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: release-${{ github.sha }}
@@ -97,8 +95,14 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_PASSWORD: ${{ secrets.TELEGRAM_ADMIN_PASSWORD }}
+          LEADS_ENABLED: ${{ vars.LEADS_ENABLED }}
+          LEADS_ALLOWED_ORIGINS: ${{ vars.LEADS_ALLOWED_ORIGINS }}
+          TELEGRAM_RETRY_SECONDS: ${{ vars.TELEGRAM_RETRY_SECONDS }}
         run: |
           set -euo pipefail
+          set +x
           latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
           if [[ "$latest" != "$GITHUB_SHA" ]]; then
             echo 'Skipping an outdated commit; a newer main commit exists.'
@@ -113,14 +117,17 @@ jobs:
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]
           (( DEPLOY_PORT >= 1 && DEPLOY_PORT <= 65535 ))
+          runtime_config="$RUNNER_TEMP/art-project-api-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.env"
+          trap 'rm -f "$HOME/.ssh/deploy_key" "$runtime_config"' EXIT
+          python3 deploy/runtime_config.py "$runtime_config"
           install -m 700 -d "$HOME/.ssh"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
-          trap 'rm -f "$HOME/.ssh/deploy_key"' EXIT
           ssh_options=(-i "$HOME/.ssh/deploy_key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
           target="$DEPLOY_USER@$DEPLOY_HOST"
           remote="/opt/art-project/incoming/$GITHUB_SHA"
           ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "mkdir -p '$remote'"
           scp "${ssh_options[@]}" -P "$DEPLOY_PORT" release/* "$target:$remote/"
-          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "bash '$remote/release.sh' '$GITHUB_SHA'"
+          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" \
+            "bash '$remote/release.sh' '$GITHUB_SHA' --runtime-config-stdin" < "$runtime_config"

@@ -28,10 +28,8 @@ services:
       - ${API_ENV_FILE:-/opt/art-project/config/api.env}
     environment:
       DATABASE_PATH: /data/leads.sqlite3
-      GEOIP_DATABASE_PATH: /geoip/country.mmdb
     volumes:
       - leads-data:/data
-      - ${GEOIP_DIRECTORY:-/opt/art-project/config/geoip}:/geoip:ro
     restart: unless-stopped
     read_only: true
     tmpfs:

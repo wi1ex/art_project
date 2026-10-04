@@ -4,6 +4,8 @@
 
 GitHub Actions собирает два Docker-образа (статический сайт и API заявок) и доставляет их на сервер при push в `main`. Устанавливать Node.js/Python и клонировать репозиторий на сервер не нужно. Порт 80 должен быть свободен.
 
+Если сервер и автодеплой уже настроены, для обновления достаточно добавить настройки бота в существующий GitHub Environment `production` по разделу7 и выполнить Commit and Push. Разделы1–6 описывают первоначальную подготовку.
+
 ## 1. Проверить систему
 
 ```bash
@@ -139,57 +141,43 @@ rm -f /root/.ssh/art-project-actions
 
 Публичный ключ в `/home/deploy/.ssh/authorized_keys` должен остаться.
 
-## 7. Подготовить конфигурацию заявок
+## 7. Настроить заявки через GitHub Environment
 
-Конфигурация хранится отдельно от релизов и Git. Перед первым деплоем создать файл с выключенным приёмом. Если файл уже существует, сохранить его настройки.
+В репозитории откройте **Settings → Environments → production**. Настройки бота добавляются в это же окружение; существующие `DEPLOY_*` secrets сохраняются.
 
-```bash
-install -d -o deploy -g deploy -m 700 /opt/art-project/config
-if [ ! -e /opt/art-project/config/api.env ]; then
-  (umask 077; printf 'LEADS_ENABLED=false\nTELEGRAM_BOT_TOKEN=\nTELEGRAM_CHAT_ID=\nLEADS_ALLOWED_ORIGINS=\n' > /opt/art-project/config/api.env)
-fi
-chown deploy:deploy /opt/art-project/config/api.env
-chmod 600 /opt/art-project/config/api.env
-```
+**Environment secrets:**
 
-API запускается с отключённой отправкой, пока не заданы бот, получатель, разрешённый адрес сайта и `LEADS_ENABLED=true`. Форма проверяет доступность API и показывает прямые контакты, если отправка недоступна.
+| Secret | Значение |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Токен созданного бота от BotFather |
+| `TELEGRAM_ADMIN_PASSWORD` | `12345678` — пароль для авторизации администраторов |
 
-Для автоматического выбора языка при первом открытии `/` установить бесплатную [DB-IP Country Lite](https://db-ip.com/db/download/ip-to-country-lite). Она определяет страну по IP локально: CZ → чешский, RU → русский, остальные → английский. Ручной выбор сохраняется в браузере; прямые адреса `/cs/`, `/en/`, `/ru/` всегда открывают указанный язык. Без базы или при ошибке используется английский. VPN может изменить определяемую страну.
+**Environment variables:**
 
-База обновляется ежемесячно, лицензия CC BY 4.0 требует ссылку на DB-IP на сайте; ссылка включена в футер. Базу не добавлять в Git. Выполнить перед первым деплоем (или повторить для обновления):
+| Variable | Значение для проверки сайта и бота |
+| --- | --- |
+| `LEADS_ENABLED` | `true` |
+| `LEADS_ALLOWED_ORIGINS` | `http://129.101.120.192` либо фактический origin сайта |
+| `TELEGRAM_RETRY_SECONDS` | `300` |
 
-```bash
-(
-  set -e
-  install -d -m 755 /opt/art-project/config/geoip
-  geoip_month=$(date -u +%Y-%m)
-  geoip_archive=$(mktemp /opt/art-project/config/geoip/country.XXXXXX.gz)
-  geoip_database=$(mktemp /opt/art-project/config/geoip/country.XXXXXX.mmdb)
-  trap 'rm -f -- "$geoip_archive" "$geoip_database"' EXIT
-  curl --fail --location --proto '=https' --max-time 90 --user-agent 'Mozilla/5.0' --referer https://db-ip.com/db/download/ip-to-country-lite "https://download.db-ip.com/free/dbip-country-lite-$geoip_month.mmdb.gz" -o "$geoip_archive"
-  gzip -dc "$geoip_archive" > "$geoip_database"
-  test -s "$geoip_database"
-  chmod 644 "$geoip_database"
-  mv -- "$geoip_database" /opt/art-project/config/geoip/country.mmdb
-)
-```
+Origin содержит протокол, адрес и при необходимости порт, без пути, query или завершающего `/`. Несколько допустимых origins перечисляются через запятую. Пароль — одна строка до256символов без апострофа, обратного слеша и пробелов по краям. При `LEADS_ENABLED=true` обязательны токен и origin; ошибка конфигурации прерывает деплой до изменения контейнеров. По умолчанию приём выключен, интервал повтора300секунд, пароль12345678. Для проверки одной вёрстки можно оставить `LEADS_ENABLED=false` без токена.
 
-После обновления базы на работающем сайте перезапустить API, чтобы открыть новый файл:
+Деплой получает secrets и variables из `production`, проверяет их и передаёт конфигурацию по SSH. Скрипт релиза автоматически создаёт/обновляет `/opt/art-project/config/api.env` с правами600 под пользователем `deploy`. Ручное создание этого файла на сервере и локальный `.env` для автодеплоя больше не нужны. Токен не входит в Docker-образы, release artifacts или логи.
 
-```bash
-cd /opt/art-project
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml restart api
-```
+При неудачном запуске нового релиза прежняя конфигурация восстанавливается вместе с предыдущими контейнерами. После изменения настроек в GitHub выполните **Actions → Check and deploy → Run workflow** для `main` либо следующий push: изменение secret или variable само по себе workflow не запускает. Ручные изменения серверного `api.env` заменяются настройками из GitHub при следующем автодеплое.
 
-Запросы страны не зависят от включения бота и не отправляют IP посетителя третьим лицам. Если позже добавить CDN или reverse proxy перед Nginx, настроить доверенные proxy IP и восстановление адреса клиента отдельно; произвольные заголовки `X-Forwarded-For` сейчас игнорируются.
+API принимает заявки только когда включён `LEADS_ENABLED=true`, задан токен бота и указан точный origin сайта в `LEADS_ALLOWED_ORIGINS`. Получатель отдельно не задаётся: заявки отправляются в личные чаты, которые прошли парольную авторизацию в боте.
+Список таких чатов фиксируется в момент приёма заявки: администратор, авторизовавшийся позже, получает только новые заявки.
+
+Корневой адрес `/` всегда открывает чешскую версию `/cs/`. Ручной выбор языка работает через переключатель; прямые адреса `/cs/`, `/en/` и `/ru/` всегда открывают указанный язык. База геолокации для выбора языка не используется.
 
 ## 8. Запустить первый деплой
 
-Отправить файлы проекта в ветку `main`, например через **Commit and Push** в PyCharm. Открыть в GitHub **Actions → Check and deploy**, дождаться успешного завершения `build` и `deploy`.
+Отправьте файлы проекта в ветку `main`, например через **Commit and Push** в PyCharm. Откройте в GitHub **Actions → Check and deploy** и дождитесь успешного завершения `build` и `deploy`.
 
-Если файлы уже в `main`, выбрать **Run workflow** для `main`. При ошибке открыть лог первого упавшего шага. До настройки секретов и SSH-доступа деплой не сможет завершиться.
+Если файлы уже в `main`, выберите **Run workflow** для `main`. При ошибке откройте лог первого упавшего шага. До настройки секретов и SSH-доступа деплой не сможет завершиться.
 
-Сервер получает готовый образ в `/opt/art-project`, запускает контейнер и проверяет healthcheck. При неудачном запуске скрипт пытается восстановить предыдущий релиз, если он существует. Последующие push в `main` запускают обновление автоматически.
+Сервер получает готовые образы в `/opt/art-project`, запускает контейнеры и проверяет healthcheck. При неудачном запуске скрипт пытается восстановить предыдущий релиз, если он существует. Последующие push в `main` запускают обновление автоматически.
 
 ## 9. Проверить сайт
 
@@ -198,12 +186,11 @@ docker compose -p art-project --env-file current/release.env -f current/compose.
 ```bash
 curl --fail http://127.0.0.1/healthz
 curl --fail http://127.0.0.1/api/healthz
-curl --fail http://127.0.0.1/api/locale
 cd /opt/art-project
 docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml ps
 ```
 
-Ожидаются ответ `ok` от сайта, JSON с `status: "ok"` от API и статус обоих контейнеров `healthy`. До настройки бота API возвращает `accepting_leads: false`. В браузере открыть `http://ПУБЛИЧНЫЙ_IP_СЕРВЕРА/ru/`. Также доступны `/en/` и `/cs/`.
+Ожидаются ответ `ok` от сайта, JSON со `status: "ok"` от API и статус обоих контейнеров `healthy`. До настройки бота API возвращает `accepting_leads: false`. В браузере откройте `http://ПУБЛИЧНЫЙ_IP_СЕРВЕРА/` или `/cs/`; доступны также `/en/` и `/ru/`.
 
 Для диагностики:
 
@@ -214,44 +201,24 @@ docker compose -p art-project --env-file current/release.env -f current/compose.
 
 Конфигурация публикует HTTP на порту 80. HTTPS требует отдельной настройки TLS.
 
-## 10. Подключить Telegram
+## 10. Проверить Telegram-бота
 
-Создать бота через `/newbot` у [BotFather](https://t.me/BotFather). Для личных уведомлений открыть созданного бота и нажать Start. Для групповых уведомлений добавить его в рабочую группу и отправить туда `/start@ИМЯ_БОТА`. Боту достаточно права отправлять сообщения, права администратора не требуются. Ответ на `/start` этот сервис не отправляет.
+Создайте бота через `/newbot` у [BotFather](https://t.me/BotFather), если он ещё не создан. Внесите токен и остальные настройки в `production` по разделу7 и дождитесь успешного деплоя. Бот используется в личном чате; группы и каналы не авторизуются.
 
-Ввести токен в доверенной консоли сервера. Ввод скрыт; токен не попадёт в историю команд. Эта команда предназначена для первой настройки: она заменяет файл конфигурации с выключенным приёмом.
+После деплоя откройте личный чат с ботом и отправьте `/start`. Бот запросит пароль; отправьте `12345678` отдельным сообщением (либо пароль из `TELEGRAM_ADMIN_PASSWORD`). После успешной авторизации бот сохранит личный chat ID в SQLite и покажет кнопку **Посмотреть все заявки за неделю**. Авторизуйте все нужные личные чаты до первой тестовой заявки.
 
-```bash
-read -rsp 'Токен бота: ' telegram_token; printf '\n'
-[[ "$telegram_token" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] || { echo 'Неверный формат токена'; unset telegram_token; exit 1; }
-(umask 077; printf 'LEADS_ENABLED=false\nTELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=\nLEADS_ALLOWED_ORIGINS=\n' "$telegram_token" > /opt/art-project/config/api.env)
-unset telegram_token
-chown deploy:deploy /opt/art-project/config/api.env
-cd /opt/art-project
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml up -d --no-deps --force-recreate api
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml exec -T api python -m backend.cli chats
-```
+| Команда | Действие |
+| --- | --- |
+| `/start` | Запрос пароля либо показ меню авторизованному администратору |
+| `/week` или кнопка недели | Заявки за последние семь суток: только дата и телефон |
+| `/admins` | Текущие администраторы: имя, username, ссылка на профиль и дата регистрации в боте в Europe/Prague |
+| `/logout` | Выход из админки, удаление из текущего списка и скрытие клавиатуры |
 
-Последняя команда только читает доступные обновления Telegram и выводит ID чатов, не отправляя сообщений. Если список пуст, повторить `/start` в нужном чате и команду `chats`. Обновления Telegram доступны ограниченное время. Выбрать ID нужного личного чата или группы; у группы ID обычно отрицательный.
+`/week`, `/admins` и `/logout` доступны только авторизованным администраторам в личном чате. Имя и username обновляются при обращении пользователя к боту. Если username отсутствует, бот показывает ссылку на профиль по Telegram ID; её открытие зависит от настроек приватности Telegram. После `/logout` дальнейшие и ещё не отправленные уведомления этому пользователю отменяются. Повторный вход выполняется через `/start` и пароль; прежние отменённые доставки не возобновляются.
 
-Включить приём, указав точный origin сайта (с протоколом и портом, если он нестандартный; без пути и завершающего `/`). Для текущего IP это `http://129.101.120.192`. При смене домена/HTTPS обновить разрешённые origins; несколько значений разделяются запятыми.
+Каждая принятая заявка сначала сохраняется в SQLite вместе со снимком личных чатов, авторизованных на этот момент. Сообщение отправляется каждому адресу из этого снимка; успешно получившие его `chat_id` сохраняются во внутреннем статусе. При частичной доставке через пять минут повторяются только неуспешные адресаты. Администратор, авторизовавшийся позже, автоматические уведомления по старым заявкам не получает; `/week` показывает все заявки за последние семь суток.
 
-```bash
-read -rp 'ID чата получателя: ' telegram_chat_id
-[[ "$telegram_chat_id" =~ ^-?[0-9]+$ ]] || { echo 'Неверный ID чата'; exit 1; }
-read -rp 'Origin сайта: ' site_origin
-[[ "$site_origin" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || { echo 'Неверный origin'; exit 1; }
-sed -i "s|^TELEGRAM_CHAT_ID=.*|TELEGRAM_CHAT_ID=$telegram_chat_id|; s|^LEADS_ALLOWED_ORIGINS=.*|LEADS_ALLOWED_ORIGINS=$site_origin|; s|^LEADS_ENABLED=.*|LEADS_ENABLED=true|" /opt/art-project/config/api.env
-chown deploy:deploy /opt/art-project/config/api.env
-chmod 600 /opt/art-project/config/api.env
-unset telegram_chat_id site_origin
-cd /opt/art-project
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml up -d --no-deps --force-recreate api
-curl --fail http://127.0.0.1/api/healthz
-```
-
-Ожидается `accepting_leads: true`. Это подтверждает настройку API; фактическую доставку проверить одной согласованной тестовой заявкой с сайта. В Telegram придут дата принятия заявки (Europe/Prague) и телефон.
-
-Заявка сначала сохраняется в SQLite, затем отправляется. Подтверждение формы означает, что заявка сохранена. После успешной доставки запись хранится семь дней и удаляется; недоставленные записи сохраняются для проверки. Постоянный Docker volume `art-project_leads-data` переживает обновление и rollback; не удалять его через `down --volumes`. Резервное копирование volume нужно настроить отдельно, если требуется защита от потери сервера.
+После успешной доставки запись хранится семь дней, затем удаляется; недоставленные записи сохраняются. Постоянный Docker volume `art-project_leads-data` переживает обновление и rollback; не удаляйте его через `down --volumes`. Резервное копирование volume нужно настроить отдельно, если требуется защита от потери сервера.
 
 ## 11. Проверить недоставленные заявки
 
@@ -260,17 +227,6 @@ cd /opt/art-project
 docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml exec -T api python -m backend.cli pending
 ```
 
-`pending` автоматически повторяется после ошибки соединения или ограничения Telegram. `blocked` требует исправления токена, получателя или прав бота. `unknown` означает, что результат отправки неизвестен (например, таймаут после возможной доставки). Такие заявки автоматически не повторяются, чтобы не создавать дубли. При перезапуске незавершённая отправка также становится `unknown`.
+Команда выводит заявки, которые ещё не доставлены полностью. Сервис повторяет отправку с задержкой не менее пяти минут только тем адресатам из исходного снимка, которые ещё не получили сообщение. Если Telegram требует более долгого ожидания, учитывается его `retry_after`. Восстановление после перезапуска также оставляет заявку в очереди; не отправляйте ручной дубль, пока не проверили чат.
 
-Для `unknown` сначала найти в Telegram сообщение с этим телефоном и временем. Если оно уже есть, отметить доставку; если нет — вручную разрешить повтор. У `sendMessage` нет ключа идемпотентности, поэтому ручной повтор при неизвестном результате тоже может создать дубль. [Telegram Bot API](https://core.telegram.org/bots/api#sendmessage).
-
-```bash
-read -rp 'UUID заявки из pending: ' lead_request_id
-# Выполнить ОДНУ команду после проверки:
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml exec -T api python -m backend.cli mark-sent "$lead_request_id"
-# Или повторить отправку после проверки/исправления настроек:
-docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml exec -T api python -m backend.cli retry "$lead_request_id"
-unset lead_request_id
-```
-
-Токен, телефон и ответы Telegram не записываются в логи API. Ограничение формы — три новые заявки с IP за десять минут и двадцать в минуту суммарно; счётчики сбрасываются при перезапуске. Согласие в форме сохранено; перед публичным запуском требуется добавить утверждённую политику с реальными реквизитами компании.
+Токен, телефон и ответы Telegram не записываются в логи API. Ограничение формы — три новые заявки с IP за десять минут и двадцать в минуту суммарно; счётчики сбрасываются при перезапуске. В футере сайта временно доступен PDF-файл-заглушка политики конфиденциальности `/privacy-policy.pdf`; замените его утверждённым документом до публичного запуска.

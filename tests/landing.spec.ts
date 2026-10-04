@@ -4,56 +4,22 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/healthz', route => route.fulfill({ json: { status: 'ok', accepting_leads: false } }));
 });
 
-for (const [region, lang] of [['CZ', 'cs'], ['RU', 'ru'], ['other', 'en']]) {
-  test(`root entry follows the locale API for ${region}`, async ({ page }) => {
-    let localeRequests = 0;
-    await page.route('**/api/locale', route => {
-      localeRequests++;
-      return route.fulfill({ json: { lang } });
-    });
-    await page.goto('/?source=campaign');
-    await expect(page).toHaveURL(new RegExp(`/${lang}/\\?source=campaign$`));
-    await expect(page.locator('html')).toHaveAttribute('lang', lang);
-    expect(localeRequests).toBe(1);
-    expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBeNull();
-    expect(await page.locator('.languages a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
-    expect(await page.locator('.footer-grid a[lang]').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
-    await expect(page.locator('.footer-bottom .geo-attribution')).toHaveAttribute('href', 'https://db-ip.com');
-  });
-}
-
-test('root entry uses the saved manual language without a locale request', async ({ page }) => {
-  let localeRequests = 0;
-  await page.addInitScript(() => localStorage.setItem('art-project-language', 'cs'));
-  await page.route('**/api/locale', route => {
-    localeRequests++;
-    return route.fulfill({ json: { lang: 'ru' } });
-  });
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/cs\/$/);
+test('root entry always opens Czech without a locale request', async ({ page }) => {
+  await page.goto('/?source=campaign');
+  await expect(page).toHaveURL(/\/cs\/\?source=campaign$/);
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
-  expect(localeRequests).toBe(0);
+  expect(await page.locator('.languages a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
+  expect(await page.locator('.footer-grid a[lang]').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
 });
 
-test('an explicit localized URL preserves its language despite a saved preference', async ({ page }) => {
-  let localeRequests = 0;
-  await page.addInitScript(() => localStorage.setItem('art-project-language', 'cs'));
-  await page.route('**/api/locale', route => {
-    localeRequests++;
-    return route.fulfill({ json: { lang: 'en' } });
-  });
-  await page.goto('/ru/');
-  await expect(page).toHaveURL(/\/ru\/$/);
-  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  expect(localeRequests).toBe(0);
+test('explicit localized URL keeps its language despite saved preference', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('art-project-language', 'ru'));
+  await page.goto('/en/');
+  await expect(page).toHaveURL(/\/en\/$/);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
-test('manual header and footer language choices persist across root entry and history', async ({ page }) => {
-  let localeRequests = 0;
-  await page.route('**/api/locale', route => {
-    localeRequests++;
-    return route.fulfill({ json: { lang: 'cs' } });
-  });
+test('manual language choices still work and root returns to Czech', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/cs\/$/);
   const initialTimeOrigin = await page.evaluate(() => performance.timeOrigin);
@@ -64,61 +30,20 @@ test('manual header and footer language choices persist across root entry and hi
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
   expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBe('ru');
-  await page.goBack();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-  expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBe('ru');
   await page.goto('/');
-  await expect(page).toHaveURL(/\/ru\/$/);
-  expect(localeRequests).toBe(1);
+  await expect(page).toHaveURL(/\/cs\/$/);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
 });
 
-test('root entry falls back to English for invalid storage and a missing locale API', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('art-project-language', 'invalid'));
-  await page.route('**/api/locale', route => route.fulfill({ status: 404, contentType: 'text/html', body: '<h1>Not found</h1>' }));
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/en\/$/);
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-});
-
-test('root entry limits a slow locale lookup and falls back to English', async ({ page }) => {
-  await page.route('**/api/locale', async route => {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await route.fulfill({ json: { lang: 'cs' } }).catch(() => {});
-  });
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/en\/$/);
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-});
-
-test('a manual root choice takes priority over a pending locale lookup', async ({ page }) => {
-  let releaseResponse = () => {};
-  const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
-  await page.route('**/api/locale', async route => {
-    await responseGate;
-    await route.fulfill({ json: { lang: 'cs' } }).catch(() => {});
-  });
-  await page.goto('/');
-  await page.locator('main nav').getByRole('link', { name: 'Русский', exact: true }).click();
-  await expect(page).toHaveURL(/\/ru\/$/);
-  releaseResponse();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBe('ru');
-});
-
-test('root language links and English default remain usable without JavaScript', async ({ browser }) => {
+test('root redirects to Czech without JavaScript', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/');
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('meta[http-equiv="refresh"]')).toHaveCount(0);
-  expect(await page.locator('main nav a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
-  await expect(page.locator('.geo-attribution a')).toHaveAttribute('href', 'https://db-ip.com');
-  await page.getByRole('link', { name: 'Continue in English →', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page).toHaveURL(/\/cs\/$/);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
   await expect(page.locator('h1')).toBeVisible();
   await context.close();
 });
-
 for (const lang of ['ru', 'en', 'cs']) {
   for (const width of [360, 430, 768, 1440, 1920]) {
     test(`${lang}: layout and assets at ${width}px`, async ({ page }) => {

@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, timezone
 from contextlib import redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
@@ -36,19 +36,16 @@ class BackendTestCase(unittest.TestCase):
         self.telegram_requests.append(request)
         return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
 
-    def app(self, *, enabled: bool = True, country_lookup=None):
+    def app(self, *, enabled: bool = True):
         return create_app(
             Settings(
                 enabled=enabled,
                 telegram_token="test-token",
-                telegram_chat_id="123456",
                 allowed_origins=("http://testserver",),
                 database_path=self.database_path,
-                geoip_database_path=str(Path(self.directory.name) / "missing-country.mmdb"),
                 start_worker=False,
             ),
             transport=self.transport,
-            country_lookup=country_lookup,
         )
 
     def payload(self, **changes) -> dict:
@@ -67,6 +64,9 @@ class BackendTestCase(unittest.TestCase):
         return headers
 
     def post(self, client: TestClient, payload: dict | None = None, **kwargs):
+        # Production snapshots authenticated admin chats when accepting a lead.
+        # Keep the API fixtures in the authenticated-admin state.
+        client.app.state.store.add_admin("123456", "123456")
         return client.post(
             "/leads",
             json=self.payload() if payload is None else payload,
@@ -222,63 +222,27 @@ class LeadApiTests(BackendTestCase):
 
 
 class LocaleTests(BackendTestCase):
-    def test_country_language_mapping_works_while_leads_are_disabled(self) -> None:
-        for country, lang in (("CZ", "cs"), ("RU", "ru"), ("US", "en"), ("DE", "en"), (None, "en")):
-            with self.subTest(country=country):
-                lookup = Mock(return_value=country)
-                with TestClient(self.app(enabled=False, country_lookup=lookup)) as client:
-                    response = client.get("/locale", headers={"X-Real-IP": "8.8.8.8"})
-                    self.assertEqual(response.status_code, 200)
-                    self.assertEqual(response.json(), {"lang": lang})
-                    self.assertIn("no-store", response.headers["Cache-Control"])
-                    lookup.assert_called_once_with("8.8.8.8")
-        self.assertEqual(self.telegram_requests, [])
-
-    def test_ipv6_real_ip_is_used_and_forwarded_for_is_ignored(self) -> None:
-        lookup = Mock(return_value="CZ")
-        with TestClient(self.app(enabled=False, country_lookup=lookup)) as client:
-            response = client.get("/locale", headers={
-                "X-Real-IP": "2001:4860:4860::8888", "X-Forwarded-For": "1.1.1.1"
-            })
-            self.assertEqual(response.json(), {"lang": "cs"})
-            lookup.assert_called_once_with("2001:4860:4860::8888")
-
-    def test_private_invalid_and_missing_ip_default_to_english_without_lookup(self) -> None:
-        lookup = Mock(return_value="RU")
-        with TestClient(self.app(enabled=False, country_lookup=lookup)) as client:
-            for address in (None, "not-an-ip", "127.0.0.1", "10.1.2.3", "192.168.1.10", "::1", "fc00::1", "fe80::1"):
-                with self.subTest(address=address):
-                    headers = {"X-Forwarded-For": "8.8.8.8"}
-                    if address is not None:
-                        headers["X-Real-IP"] = address
-                    response = client.get("/locale", headers=headers)
-                    self.assertEqual(response.json(), {"lang": "en"})
-                    self.assertIn("no-store", response.headers["Cache-Control"])
-            lookup.assert_not_called()
-
-    def test_lookup_failure_defaults_to_english(self) -> None:
-        lookup = Mock(side_effect=RuntimeError("Unreadable country database"))
-        with TestClient(self.app(enabled=False, country_lookup=lookup)) as client:
-            response = client.get("/locale", headers={"X-Real-IP": "8.8.8.8"})
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), {"lang": "en"})
-
-    def test_missing_country_database_defaults_to_english(self) -> None:
+    def test_locale_is_always_czech(self) -> None:
         with TestClient(self.app(enabled=False)) as client:
-            response = client.get("/locale", headers={"X-Real-IP": "8.8.8.8"})
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), {"lang": "en"})
+            for address in ("8.8.8.8", "127.0.0.1", "not-an-ip"):
+                with self.subTest(address=address):
+                    response = client.get("/locale", headers={"X-Real-IP": address})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json(), {"lang": "cs"})
+                    self.assertIn("no-store", response.headers["Cache-Control"])
 
 
 class DeliveryTests(BackendTestCase):
     def dispatch(self, client: TestClient) -> bool:
+        client.app.state.store.add_admin("123456", "123456")
         return client.portal.call(client.app.state.dispatcher.dispatch_once)
 
     def test_accepted_lead_is_sent_once_with_phone_and_original_prague_date(self) -> None:
         request_id = str(uuid4())
         created_at = datetime(2026, 1, 15, 8, 30, tzinfo=timezone.utc).timestamp()
         with TestClient(self.app()) as client:
-            client.app.state.store.accept(request_id, "+420774411158", now=created_at)
+            client.app.state.store.accept(request_id, "+420774411158", now=created_at,
+                                          admin_chats=("123456",))
             self.assertEqual(self.telegram_requests, [])
             self.assertTrue(self.dispatch(client))
             stored = client.app.state.store.get(request_id)
@@ -294,7 +258,90 @@ class DeliveryTests(BackendTestCase):
         self.assertIn("+420774411158", body["text"])
         self.assertIn("15.01.2026 09:30:00 CET", body["text"])
 
-    def test_read_timeout_marks_delivery_unknown_without_automatic_retry(self) -> None:
+    def test_accepted_lead_is_sent_to_every_authenticated_admin(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            client.app.state.store.add_admin("42", "42")
+            client.app.state.store.add_admin("43", "43")
+            client.app.state.store.accept(request_id, "+420774411158", admin_chats=("42", "43"))
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(client.app.state.store.get(request_id)["state"], "sent")
+        self.assertEqual(
+            [json.loads(request.content)["chat_id"] for request in self.telegram_requests],
+            ["42", "43"],
+        )
+
+    def test_admin_authenticated_after_accept_does_not_receive_existing_lead(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin("early", "early")
+            store.accept(request_id, "+420774411158", admin_chats=store.admin_chats())
+            store.add_admin("late", "late")
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(store.get(request_id)["state"], "sent")
+            self.assertEqual(store.delivered_chats(request_id), ["early"])
+            self.assertEqual([json.loads(request.content)["chat_id"] for request in self.telegram_requests], ["early"])
+
+    def test_lead_without_admin_snapshot_stays_undelivered_for_late_admin(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.accept(request_id, "+420774411158")
+            store.add_admin("late", "late")
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(store.get(request_id)["state"], "pending")
+            self.assertEqual(store.delivery_rows(request_id), [])
+            self.assertEqual(self.telegram_requests, [])
+
+    def test_admin_added_after_acceptance_is_not_added_to_recipient_snapshot(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            client.app.state.store.add_admin("42", "42")
+            client.app.state.store.accept(request_id, "+420774411158", admin_chats=("42",))
+            client.app.state.store.add_admin("43", "43")
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(client.app.state.store.get(request_id)["delivered_to"], "42")
+            self.assertEqual(
+                [json.loads(request.content)["chat_id"] for request in self.telegram_requests],
+                ["42"],
+            )
+
+    def test_failed_admin_delivery_retries_only_that_admin(self) -> None:
+        attempts = 0
+
+        def response(request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            self.telegram_requests.append(request)
+            if attempts == 2:
+                raise httpx.ConnectTimeout("temporary failure", request=request)
+            return httpx.Response(200, json={"ok": True, "result": {"message_id": attempts}})
+
+        self.transport = httpx.MockTransport(response)
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            client.app.state.store.add_admin("42", "42")
+            client.app.state.store.add_admin("43", "43")
+            client.app.state.store.accept(request_id, "+420774411158", admin_chats=("42", "43"))
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(client.app.state.store.get(request_id)["state"], "pending")
+            with client.app.state.store.db:
+                client.app.state.store.db.execute(
+                    "UPDATE leads SET next_attempt=0 WHERE request_id=?", (request_id,)
+                )
+                client.app.state.store.db.execute(
+                    "UPDATE lead_deliveries SET next_attempt=0 WHERE request_id=? AND state='pending'",
+                    (request_id,),
+                )
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(client.app.state.store.get(request_id)["state"], "sent")
+        self.assertEqual(
+            [json.loads(request.content)["chat_id"] for request in self.telegram_requests],
+            ["42", "43", "43"],
+        )
+
+    def test_read_timeout_stays_undelivered_for_a_five_minute_retry(self) -> None:
         def timeout(request: httpx.Request) -> httpx.Response:
             self.telegram_requests.append(request)
             raise httpx.ReadTimeout("No response", request=request)
@@ -305,12 +352,12 @@ class DeliveryTests(BackendTestCase):
             self.assertEqual(self.post(client, payload).status_code, 202)
             self.assertTrue(self.dispatch(client))
             stored = client.app.state.store.get(payload["request_id"])
-            self.assertEqual(stored["state"], "unknown")
+            self.assertEqual(stored["state"], "pending")
             self.assertFalse(self.dispatch(client))
         with TestClient(self.app()) as client:
             self.assertEqual(self.post(client, payload).status_code, 202)
             self.assertFalse(self.dispatch(client))
-            self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "unknown")
+            self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "pending")
         self.assertEqual(len(self.telegram_requests), 1)
 
     def test_connection_failure_is_queued_with_backoff(self) -> None:
@@ -326,7 +373,7 @@ class DeliveryTests(BackendTestCase):
             self.assertTrue(self.dispatch(client))
             stored = client.app.state.store.get(payload["request_id"])
             self.assertEqual(stored["state"], "pending")
-            self.assertGreaterEqual(stored["next_attempt"], before + 30)
+            self.assertGreaterEqual(stored["next_attempt"], before + 300)
             self.assertFalse(self.dispatch(client))
         self.assertEqual(len(self.telegram_requests), 1)
 
@@ -352,6 +399,90 @@ class DeliveryTests(BackendTestCase):
             self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "sent")
         self.assertEqual(len(self.telegram_requests), 1)
 
+    def test_failed_per_admin_commit_retries_write_before_sending_next_admin(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin('42')
+            store.add_admin('43')
+            store.accept(request_id, '+420774411158', admin_chats=store.admin_chats())
+            original_finish = store.finish_delivery
+            calls = 0
+
+            def finish(*args):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise sqlite3.OperationalError('Temporary write failure')
+                return original_finish(*args)
+
+            with patch.object(store, 'finish_delivery', side_effect=finish):
+                with self.assertRaises(sqlite3.OperationalError):
+                    self.dispatch(client)
+                self.assertEqual(len(self.telegram_requests), 1)
+                self.assertFalse(client.get('/healthz').json()['accepting_leads'])
+                self.assertTrue(self.dispatch(client))
+            self.assertEqual(store.get(request_id)['state'], 'sent')
+            self.assertEqual(store.delivered_chats(request_id), ['42', '43'])
+            self.assertTrue(client.get('/healthz').json()['accepting_leads'])
+            self.assertEqual([json.loads(request.content)['chat_id'] for request in self.telegram_requests], ['42', '43'])
+
+    def test_logout_cancels_only_revoked_recipient_and_preserves_successful_ids(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin('42')
+            store.add_admin('43')
+            store.accept(request_id, '+420774411158', admin_chats=store.admin_chats())
+            store.remove_admin('43')
+            self.assertTrue(self.dispatch(client))
+            self.assertEqual(store.get(request_id)['state'], 'cancelled')
+            self.assertEqual(store.delivered_chats(request_id), ['42'])
+            self.assertEqual({row['chat_id']: row['state'] for row in store.delivery_rows(request_id)},
+                             {'42': 'sent', '43': 'cancelled'})
+            self.assertEqual([json.loads(request.content)['chat_id'] for request in self.telegram_requests], ['42'])
+            self.assertEqual(store.unresolved(), [])
+            store.add_admin('43')
+            self.assertFalse(self.dispatch(client))
+
+    def test_failed_inflight_send_after_logout_does_not_requeue_after_reauth(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin('42')
+            store.accept(request_id, '+420774411158', admin_chats=store.admin_chats())
+
+            async def logout_during_send(row, chat_id):
+                store.remove_admin(chat_id)
+                store.add_admin(chat_id)
+                return 'pending', 300, 'connection_unavailable'
+
+            with patch.object(client.app.state.dispatcher.sender, 'send_one', side_effect=logout_during_send):
+                self.assertTrue(self.dispatch(client))
+            self.assertEqual(store.delivery_rows(request_id)[0]['state'], 'cancelled')
+            self.assertEqual(store.get(request_id)['state'], 'cancelled')
+            self.assertEqual(store.delivered_chats(request_id), [])
+            self.assertFalse(self.dispatch(client))
+
+    def test_successful_inflight_send_after_logout_records_actual_delivery(self) -> None:
+        request_id = str(uuid4())
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin('42')
+            store.accept(request_id, '+420774411158', admin_chats=store.admin_chats())
+
+            async def logout_during_send(row, chat_id):
+                store.remove_admin(chat_id)
+                return 'sent', 0, ''
+
+            with patch.object(client.app.state.dispatcher.sender, 'send_one', side_effect=logout_during_send):
+                self.assertTrue(self.dispatch(client))
+            self.assertFalse(store.is_admin('42'))
+            self.assertEqual(store.delivery_rows(request_id)[0]['state'], 'sent')
+            self.assertEqual(store.get(request_id)['state'], 'sent')
+            self.assertEqual(store.delivered_chats(request_id), ['42'])
+            self.assertFalse(self.dispatch(client))
+
     def test_telegram_rate_limit_is_retained_for_future_delivery(self) -> None:
         self.transport = httpx.MockTransport(
             lambda request: httpx.Response(
@@ -365,7 +496,7 @@ class DeliveryTests(BackendTestCase):
             self.assertTrue(self.dispatch(client))
             stored = client.app.state.store.get(payload["request_id"])
             self.assertEqual(stored["state"], "pending")
-            self.assertGreaterEqual(stored["next_attempt"], before + 120)
+            self.assertGreaterEqual(stored["next_attempt"], before + 300)
             self.assertFalse(self.dispatch(client))
         with TestClient(self.app()) as client:
             self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "pending")
@@ -385,7 +516,7 @@ class DeliveryTests(BackendTestCase):
                     self.assertTrue(self.dispatch(client))
                     stored = client.app.state.store.get(payload["request_id"])
                     self.assertEqual(stored["state"], "pending")
-                    self.assertGreaterEqual(stored["next_attempt"], before + 30)
+                    self.assertGreaterEqual(stored["next_attempt"], before + 300)
 
     def test_unusable_telegram_responses_are_not_reported_as_delivered(self) -> None:
         responses = (
@@ -402,7 +533,7 @@ class DeliveryTests(BackendTestCase):
                 with TestClient(self.app()) as client:
                     self.assertEqual(self.post(client, payload).status_code, 202)
                     self.assertTrue(self.dispatch(client))
-                    self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "unknown")
+                    self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "pending")
 
     def test_invalid_telegram_chat_is_preserved_for_operator_action(self) -> None:
         self.transport = httpx.MockTransport(
@@ -413,10 +544,10 @@ class DeliveryTests(BackendTestCase):
             self.assertEqual(self.post(client, payload).status_code, 202)
             self.assertTrue(self.dispatch(client))
             stored = client.app.state.store.get(payload["request_id"])
-            self.assertEqual(stored["state"], "blocked")
+            self.assertEqual(stored["state"], "pending")
             self.assertFalse(self.dispatch(client))
         with TestClient(self.app()) as client:
-            self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "blocked")
+            self.assertEqual(client.app.state.store.get(payload["request_id"])["state"], "pending")
 
     def test_logs_do_not_expose_token_phone_or_telegram_response(self) -> None:
         secret_description = "telegram-response-private-content"
@@ -436,14 +567,75 @@ class DeliveryTests(BackendTestCase):
         finally:
             logger.setLevel(previous_level)
             logger.removeHandler(handler)
-        self.assertIn("blocked", output.getvalue())
+        self.assertIn("pending", output.getvalue())
         self.assertNotIn("test-token", output.getvalue())
         self.assertNotIn("+420774411158", output.getvalue())
         self.assertNotIn(secret_description, output.getvalue())
 
+    def test_each_admin_delivery_is_retried_without_duplicate_success(self) -> None:
+        delivered_chats: list[str] = []
+        failed_once: set[str] = set()
+
+        def partial_delivery(request: httpx.Request) -> httpx.Response:
+            chat_id = json.loads(request.content)['chat_id']
+            delivered_chats.append(chat_id)
+            if chat_id in {'four', 'five'} and chat_id not in failed_once:
+                failed_once.add(chat_id)
+                raise httpx.ConnectTimeout('Temporary failure', request=request)
+            return httpx.Response(200, json={'ok': True, 'result': {'message_id': len(delivered_chats)}})
+
+        self.transport = httpx.MockTransport(partial_delivery)
+        payload = self.payload()
+        with TestClient(self.app()) as client:
+            store = client.app.state.store
+            store.add_admin('one', 'one')
+            store.add_admin('two', 'two')
+            store.add_admin('three', 'three')
+            store.add_admin('four', 'four')
+            store.add_admin('five', 'five')
+            self.assertEqual(client.post('/leads', json=payload, headers=self.headers()).status_code, 202)
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(delivered_chats, ['five', 'four', 'one', 'three', 'two'])
+            self.assertEqual(store.get(payload['request_id'])['state'], 'pending')
+            self.assertEqual(
+                {row['chat_id']: row['state'] for row in store.delivery_rows(payload['request_id'])},
+                {'one': 'sent', 'two': 'sent', 'three': 'sent', 'four': 'pending', 'five': 'pending'},
+            )
+            with store.db:
+                store.db.execute(
+                    'UPDATE leads SET next_attempt=0 WHERE request_id=?', (payload['request_id'],)
+                )
+                store.db.execute(
+                    'UPDATE lead_deliveries SET next_attempt=0 WHERE request_id=? AND state=?',
+                    (payload['request_id'], 'pending'),
+                )
+            self.assertTrue(client.portal.call(client.app.state.dispatcher.dispatch_once))
+            self.assertEqual(delivered_chats, ['five', 'four', 'one', 'three', 'two', 'five', 'four'])
+            self.assertEqual(store.get(payload['request_id'])['state'], 'sent')
+
 
 class OutboxTests(BackendTestCase):
-    def test_crash_during_send_becomes_unknown_and_cannot_be_reclaimed(self) -> None:
+    def test_cancelled_leads_release_capacity_and_expire_after_retention(self) -> None:
+        store = Store(self.database_path)
+        old_time = time.time() - 8 * 86400
+        try:
+            store.add_admin('42')
+            for index in range(1000):
+                store.accept(f'old-{index}', '+420774411158', now=old_time, admin_chats=store.admin_chats())
+            with patch('backend.storage.time.time', return_value=old_time):
+                store.remove_admin('42')
+            self.assertEqual(store.unresolved(), [])
+            self.assertEqual(store.get('old-0')['state'], 'cancelled')
+            self.assertEqual(store.delivered_chats('old-0'), [])
+            store.accept('new', '+420774411159')
+            store.cleanup(7)
+            self.assertIsNone(store.get('old-0'))
+            self.assertEqual(store.delivery_rows('old-0'), [])
+            self.assertEqual(store.get('new')['state'], 'pending')
+        finally:
+            store.close()
+
+    def test_crash_during_send_is_requeued_after_five_minutes(self) -> None:
         request_id = str(uuid4())
         store = Store(self.database_path)
         try:
@@ -454,7 +646,8 @@ class OutboxTests(BackendTestCase):
             store.close()
         store = Store(self.database_path)
         try:
-            self.assertEqual(store.get(request_id)["state"], "unknown")
+            self.assertEqual(store.get(request_id)["state"], "pending")
+            self.assertGreaterEqual(store.get(request_id)["next_attempt"], time.time() + 299)
             self.assertIsNone(store.claim())
             self.assertEqual([row["request_id"] for row in store.unresolved()], [request_id])
         finally:
@@ -494,6 +687,21 @@ class OutboxTests(BackendTestCase):
 
 
 class OperatorTests(BackendTestCase):
+    def test_pending_command_omits_cancelled_leads(self) -> None:
+        store = Store(self.database_path)
+        try:
+            store.add_admin('42')
+            store.accept('cancelled', '+420774411158', admin_chats=store.admin_chats())
+            store.remove_admin('42')
+            store.accept('pending', '+420774411159')
+            output = io.StringIO()
+            with patch.dict(os.environ, {'DATABASE_PATH': self.database_path}, clear=True):
+                with patch('sys.argv', ['backend.cli', 'pending']), redirect_stdout(output):
+                    cli_main()
+            self.assertEqual(json.loads(output.getvalue())['request_id'], 'pending')
+        finally:
+            store.close()
+
     def chats(self, response: httpx.Response) -> str:
         def reply(request: httpx.Request) -> httpx.Response:
             self.telegram_requests.append(request)

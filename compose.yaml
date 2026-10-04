@@ -31,7 +31,6 @@ services:
         required: false
     environment:
       DATABASE_PATH: /data/leads.sqlite3
-      GEOIP_DATABASE_PATH: /geoip/country.mmdb
     volumes:
       - leads-data:/data
     restart: unless-stopped

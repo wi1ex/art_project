@@ -8,6 +8,8 @@ artifacts
 design-preview.png
 test-results
 playwright-report
+output
+tmp
 .env
 .env.*
 **/.env

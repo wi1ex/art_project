@@ -37,7 +37,7 @@
   .site-footer .footer-address { margin-top: 10px; color: #8b8b8b; font-size: 18px; line-height: 24px; }
   .site-footer .footer-legal { padding-top: 57px; text-align: center; }
   .site-footer .footer-legal small { display: block; margin: 0; color: #8b8b8b; font-size: 18px; line-height: 26px; }
-  .site-footer .footer-legal .geo-attribution { display: inline-block; margin-top: 18px; color: #8b8b8b; font-size: 11px; line-height: 18px; text-decoration: underline; text-underline-offset: 3px; }
+  .site-footer .footer-legal .footer-privacy { display: inline-block; margin-top: 18px; color: #8b8b8b; font-size: 11px; line-height: 18px; text-decoration: underline; text-underline-offset: 3px; }
   .site-footer .footer-messengers { justify-self: end; padding-top: 57px; }
   .site-footer .footer-messengers .messenger-links { flex-direction: row; gap: 16px; }
   .site-footer .footer-messengers .messenger-links a { width: 60px; height: 60px; min-height: 60px; border: 1px solid #454545; background: transparent; }
@@ -89,7 +89,7 @@
     .site-footer .footer-messengers .messenger-links img { width: 26px; height: 26px; }
     .site-footer .footer-legal { padding-top: 0; margin-top: 16px; order: 2; text-align: left; }
     .site-footer .footer-legal small { font-size: 12px; line-height: 18px; }
-    .site-footer .footer-legal .geo-attribution { margin-top: 6px; font-size: 10px; line-height: 16px; }
+    .site-footer .footer-legal .footer-privacy { margin-top: 6px; font-size: 10px; line-height: 16px; }
   }
   @media (max-width: 360px) {
     .site-footer .footer-grid { column-gap: 16px; }

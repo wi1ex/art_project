@@ -57,7 +57,7 @@ def main():
     db.row_factory = sqlite3.Row
     try:
         if args.command == 'pending':
-            rows = db.execute("SELECT request_id, phone, created_at, state, error_code, attempts FROM leads WHERE state!='sent' ORDER BY created_at LIMIT 1000")
+            rows = db.execute("SELECT request_id, phone, created_at, state, error_code, attempts, delivered_to FROM leads WHERE state NOT IN ('sent','cancelled') ORDER BY created_at LIMIT 1000")
             for row in rows:
                 item = dict(row)
                 item['created_at'] = datetime.fromtimestamp(item['created_at'], timezone.utc).isoformat()
