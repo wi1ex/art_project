@@ -1,0 +1,118 @@
+---
+import { content, type Language } from '../data/content';
+import { company } from '../data/company';
+import { mobileLanguages, mobileMenuText } from '../data/navigation';
+import Icon from './Icon.astro';
+import '../styles/mobile-menu.css';
+
+const { lang } = Astro.props as { lang: Language };
+const t = mobileMenuText[lang];
+const anchors = ['portfolio', 'services', 'about', 'contact'];
+const currentLanguage = mobileLanguages.find(language => language.code === lang)!;
+---
+<div class="mobile-menu">
+  <button class="mobile-menu-toggle" type="button" data-menu-open aria-label={content[lang].menu} aria-controls="mobile-menu-panel" aria-expanded="false" aria-haspopup="dialog"><Icon name="menu" /></button>
+  <dialog id="mobile-menu-panel" class="mobile-menu-panel" aria-label={content[lang].menu}>
+    <div class="mobile-menu-header">
+      <a href={`/${lang}/`} class="mobile-menu-logo" aria-label="ART PROJECT"><img src="/images/logo.svg" alt="" width="52" height="44" /></a>
+      <button class="mobile-menu-close" type="button" data-menu-close aria-label={t.close} autofocus>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="m3 3 8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+      </button>
+    </div>
+    <div class="mobile-menu-body">
+      <div class="mobile-menu-language-section">
+        <p id="mobile-menu-language-heading" class="mobile-menu-label">{t.language}</p>
+        <nav class="mobile-menu-languages" aria-labelledby="mobile-menu-language-heading">
+          {mobileLanguages.map(({ code, label, name }) => <a href={`/${code}/`} lang={code} aria-label={name} aria-current={code === lang ? 'page' : undefined} data-astro-prefetch>{label}</a>)}
+        </nav>
+        <p class="mobile-menu-language-name">{currentLanguage.name}</p>
+      </div>
+      <nav class="mobile-menu-navigation" aria-labelledby="mobile-menu-navigation-heading">
+        <p id="mobile-menu-navigation-heading" class="mobile-menu-label">{t.navigation}</p>
+        <ul>{t.links.map((label, i) => <li><a href={`#${anchors[i]}`}>{label}</a></li>)}</ul>
+      </nav>
+      <div class="mobile-menu-contacts">
+        <p>{t.contact}</p>
+        <a class="mobile-menu-phone" href={company.telephone}>{company.phone}</a>
+        <a class="mobile-menu-email" href={`mailto:${company.email}`}>{company.email}</a>
+      </div>
+    </div>
+  </dialog>
+</div>
+
+<script>
+  let disposeMenu = () => {};
+
+  function initializeMenu() {
+    disposeMenu();
+    const trigger = document.querySelector<HTMLButtonElement>('[data-menu-open]');
+    const panel = document.querySelector<HTMLDialogElement>('#mobile-menu-panel');
+    if (!trigger || !panel) return;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
+    const mobile = matchMedia('(max-width: 640px)');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    let animation: Animation | undefined;
+    let closing = false;
+
+    function finishClose() {
+      if (panel!.open) panel!.close();
+      animation?.cancel();
+      animation = undefined;
+      closing = false;
+      trigger!.setAttribute('aria-expanded', 'false');
+    }
+
+    function closeMenu(animate = true) {
+      if (!panel!.open) return;
+      if (!animate || reducedMotion.matches) { finishClose(); return; }
+      if (closing) return;
+      closing = true;
+      const transform = getComputedStyle(panel!).transform;
+      animation?.cancel();
+      animation = panel!.animate(
+        [{ transform }, { transform: 'translateX(100%)' }],
+        { duration: 220, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' },
+      );
+      animation.finished.then(finishClose, () => {});
+    }
+
+    trigger.addEventListener('click', () => {
+      if (!mobile.matches || panel.open) return;
+      panel.showModal();
+      panel.querySelector('.mobile-menu-body')?.scrollTo(0, 0);
+      trigger.setAttribute('aria-expanded', 'true');
+      if (!reducedMotion.matches) {
+        animation = panel.animate(
+          [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }],
+          { duration: 280, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+        );
+      }
+    }, options);
+    panel.querySelector('[data-menu-close]')?.addEventListener('click', () => closeMenu(), options);
+    panel.addEventListener('cancel', event => { event.preventDefault(); closeMenu(); }, options);
+    panel.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const controls = panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled])');
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    }, options);
+    panel.addEventListener('click', event => {
+      // Release the modal before anchor scrolling or a ClientRouter language swap.
+      if (event.target instanceof Element && event.target.closest('a')) closeMenu(false);
+    }, options);
+    mobile.addEventListener('change', () => { if (!mobile.matches) closeMenu(false); }, options);
+    disposeMenu = () => { finishClose(); controller.abort(); };
+  }
+
+  document.addEventListener('astro:before-swap', () => disposeMenu());
+  document.addEventListener('astro:page-load', initializeMenu);
+  initializeMenu();
+</script>

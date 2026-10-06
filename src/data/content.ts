@@ -6,7 +6,7 @@ type Content = {
   hero: string; intro: string; cta: string; servicesTitle: string; servicesIntro: string;
   services: [string, string][]; workLabel: string; workTitle: string; workIntro: string;
   principlesLabel: string; principlesTitle: string; principlesIntro: string;
-  principles: [string, string][]; b2bLabel: string; b2bTitle: string; b2bIntro: string;
+  principles: [string, string][]; b2bLabel: string; b2bTitle: string; b2bIntro: string; b2bMobileIntro?: string;
   partners: [string, string][]; cooperate: string; reviewsLabel: string; reviewsTitle: string;
   reviewsNote: string; contactTitle: string; contactIntro: string; phone: string;
   consent: string; submit: string; demo: string; messenger: string; messengerNote: string;
@@ -33,6 +33,7 @@ export const content: Record<Language, Content> = {
     messenger: 'Или напишите\nв любом мессенджере', messengerNote: 'Контакты для связи появятся здесь перед запуском.', footerCta: 'Оставьте заявку — мы быстро перезвоним, чтобы ответить на вопросы по проекту.', rights: 'Все права защищены.', menu: 'Меню', skip: 'Перейти к содержимому', previous: 'Предыдущая услуга', next: 'Следующая услуга',
   },
   en: {
+    b2bMobileIntro: 'Most of our work remains unseen — but it is what ensures safety and comfort for years to come.',
     title: 'ART PROJECT — engineering solutions for your home', description: 'Electrical installation, smart homes, solar energy and heat pumps. Complete engineering solutions from design to launch.',
     nav: ['Portfolio', 'Services', 'About', 'Contact'], eyebrow: 'Engineering solutions for every home', hero: 'Bringing construction projects to life from design to launch', intro: 'We create reliable engineering solutions that make buildings modern, comfortable and ready for use.', cta: 'Discuss project', servicesTitle: 'Professional solutions\nfor your home', servicesIntro: 'The entire cycle of electrical and engineering work — from consultation to warranty service.',
     services: [['Electrical installation (power section)', 'Full cycle of work: from design to turnkey delivery.'], ['Smart home', 'Control your lighting, climate and security.'], ['Solar energy', 'Installation and connection of solar energy systems.'], ['Heat pumps', 'Energy-efficient heating for your home.']],

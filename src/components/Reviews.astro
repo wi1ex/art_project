@@ -1,5 +1,5 @@
 ---
-import { reviews } from '../data/reviews';
+import { reviews, reviewSummary } from '../data/reviews';
 import { content, type Language } from '../data/content';
 import { interfaceText } from '../data/interface';
 import Icon from './Icon.astro';
@@ -11,13 +11,13 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
 <section id="reviews" class="section reviews" aria-labelledby="reviews-heading">
   <div class="container section-heading">
     <div><p class="eyebrow green">{t.reviewsLabel}</p><h2 id="reviews-heading">{t.reviewsTitle}</h2></div>
-    <div class="rating"><span class="stars" aria-hidden="true">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span><strong aria-label={`${labels.rating}: 5.0`}>5.0</strong><p>{reviews.length} {labels.reviews}</p>{labels.translation && <small class="translation-note">{labels.translation}</small>}</div>
+    <div class="rating"><span class="stars" aria-hidden="true">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span><strong aria-label={`${labels.rating}: ${reviewSummary.rating}`}>{reviewSummary.rating}</strong><p>{labels.rating} · {reviewSummary.count} {labels.reviews}</p>{labels.translation && <small class="translation-note">{labels.translation}</small>}</div>
   </div>
   <div class="review-strip" tabindex="0" role="region" aria-label={t.reviewsLabel}>
     {ordered.map(review => (
       <article class="review-card">
         <div class="review-header"><span class="avatar" style={`--avatar: ${review.color}`} aria-hidden="true"></span><div><h3 lang="ru">{review.name}</h3><p>{review.role[lang]}</p></div><span class="stars" aria-label="5 / 5">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span></div>
-        <blockquote>{review.text[lang]}</blockquote>
+        <blockquote>{`"${review.text[lang]}"`}</blockquote>
       </article>
     ))}
   </div>

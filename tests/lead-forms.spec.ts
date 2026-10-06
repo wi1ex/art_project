@@ -23,7 +23,7 @@ test('one availability request enables both lead forms after each page initializ
   }
   expect(healthRequests).toBe(1);
 
-  await page.locator('.languages').getByRole('link', { name: 'CS', exact: true }).click();
+  await page.locator('.languages a[lang="cs"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
   for (const variant of ['contact', 'footer'] as const) {
     await expect(leadForm(page, variant).locator('[name="phone"]')).toBeEnabled();
@@ -118,7 +118,7 @@ test('an uncertain footer request retains its UUID when retried after a language
   expect(requests).toHaveLength(1);
   const initialTimeOrigin = await page.evaluate(() => performance.timeOrigin);
 
-  await page.locator('.languages').getByRole('link', { name: 'CS', exact: true }).click();
+  await page.locator('.languages a[lang="cs"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
   await expect(footer.locator('[name="phone"]')).toBeEnabled();

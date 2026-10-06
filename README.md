@@ -96,7 +96,7 @@ cut -d ' ' -f 1,2 /etc/ssh/ssh_host_ed25519_key.pub
 rm -f /root/.ssh/art-project-actions
 ```
 
-Добавьте **Environment variables** в том же `production`:
+В том же `production` найдите отдельный раздел **Environment variables** и добавьте через **Add variable**:
 
 | Имя | Значение |
 | --- | --- |
@@ -123,7 +123,7 @@ cd /opt/art-project
 docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml ps
 ```
 
-Ожидаются `ok` от сайта, `status: "ok"` от API и два контейнера со статусом **`healthy`**.
+Ожидаются `ok` от сайта, `status: "ok"` и `accepting_leads: true` от API, два контейнера со статусом **`healthy`**. Если `accepting_leads: false`, проверьте настройки **Environment variables** из шага 4, затем повторите деплой.
 
 Откройте `http://IP_СЕРВЕРА/` в браузере. В личном чате с ботом отправьте `/start`, затем пароль `12345678` отдельным сообщением. **Авторизуйте все нужные личные чаты до тестовой заявки.**
 

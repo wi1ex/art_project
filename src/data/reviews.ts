@@ -7,6 +7,9 @@ type Review = {
   color: string;
 };
 
+// Rating summary from the approved design; the cards below are a selection.
+export const reviewSummary = { rating: '5.0', count: '96+' } as const;
+
 // Transcribed from the client-supplied «Отзывы.png»; EN/CS are translations.
 export const reviews: Review[] = [
   {

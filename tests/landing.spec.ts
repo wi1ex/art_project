@@ -8,8 +8,9 @@ test('root entry always opens Czech without a locale request', async ({ page }) 
   await page.goto('/?source=campaign');
   await expect(page).toHaveURL(/\/cs\/\?source=campaign$/);
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
-  expect(await page.locator('.languages a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
-  expect(await page.locator('.footer-grid a[lang]').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['cs', 'en', 'ru']);
+  expect(await page.locator('.languages a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['ru', 'cs', 'en']);
+  await expect(page.locator('.languages a')).toHaveText(['RU', 'CZ', 'ENG']);
+  await expect(page.locator('.footer-grid a[lang]')).toHaveCount(0);
 });
 
 test('explicit localized URL keeps its language despite saved preference', async ({ page }) => {
@@ -23,10 +24,10 @@ test('manual language choices still work and root returns to Czech', async ({ pa
   await page.goto('/');
   await expect(page).toHaveURL(/\/cs\/$/);
   const initialTimeOrigin = await page.evaluate(() => performance.timeOrigin);
-  await page.locator('.languages').getByRole('link', { name: 'EN', exact: true }).click();
+  await page.locator('.languages a[lang="en"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBe('en');
-  await page.locator('.footer-grid').getByRole('link', { name: 'Русский', exact: true }).click();
+  await page.locator('.languages a[lang="ru"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
   expect(await page.evaluate(() => localStorage.getItem('art-project-language'))).toBe('ru');
@@ -78,14 +79,69 @@ test('mobile navigation and service carousel', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/en/');
   const menu = page.locator('.mobile-menu');
-  await menu.locator('summary').click();
-  await menu.getByRole('link', { name: 'Services', exact: true }).click();
-  await expect(menu).not.toHaveAttribute('open', '');
+  const panel = page.locator('#mobile-menu-panel');
+  await menu.locator('[data-menu-open]').click();
+  await panel.getByRole('link', { name: 'Services', exact: true }).click();
+  await expect(panel).not.toBeVisible();
   await page.getByRole('button', { name: 'Next service' }).click();
   await expect.poll(() => page.locator('#service-list').evaluate(el => el.scrollLeft)).toBeGreaterThan(100);
-  await page.locator('.languages').getByRole('link', { name: 'CS' }).click();
+  await menu.locator('[data-menu-open]').click();
+  await panel.locator('.mobile-menu-languages a[lang="cs"]').click();
   await expect(page).toHaveURL(/\/cs\/$/);
 });
+
+for (const width of [320, 430, 640]) {
+  test(`mobile menu covers the viewport and preserves keyboard and language navigation at ${width}px`, async ({ page }) => {
+    const height = 844;
+    await page.setViewportSize({ width, height });
+    await page.goto('/en/');
+    const initialTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const trigger = page.locator('[data-menu-open]');
+    const panel = page.locator('#mobile-menu-panel');
+
+    await expect(page.locator('.languages')).not.toBeVisible();
+    await trigger.click();
+    await expect(panel).toBeVisible();
+    await expect.poll(async () => {
+      const bounds = await panel.boundingBox();
+      return bounds && Object.fromEntries(Object.entries(bounds).map(([key, value]) => [key, Math.round(value)]));
+    }).toEqual({ x: 0, y: 0, width, height });
+    await expect(panel.locator('.mobile-menu-languages a')).toHaveText(['CZ', 'RU', 'EN']);
+    await expect(panel.locator('.mobile-menu-contacts a[href^="tel:"]')).toHaveAttribute('href', 'tel:+420774411158');
+    const email = panel.locator('.mobile-menu-contacts a[href^="mailto:"]');
+    await expect(email).toHaveAttribute('href', 'mailto:mail@electroservice.com');
+    await expect(email).toBeInViewport();
+
+    const scrollPosition = await page.evaluate(() => scrollY);
+    await page.mouse.move(width / 2, height / 2);
+    await page.mouse.wheel(0, 600);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    expect(await page.evaluate(() => scrollY)).toBe(scrollPosition);
+    await email.focus();
+    await page.keyboard.press('Tab');
+    await expect.poll(() => panel.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(panel).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await panel.getByRole('link', { name: 'Services', exact: true }).click();
+    await expect(panel).not.toBeVisible();
+    await expect(page).toHaveURL(/\/en\/#services$/);
+    await trigger.click();
+    await panel.locator('.mobile-menu-languages a[lang="ru"]').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
+    await expect(panel).not.toBeVisible();
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
+
+    await trigger.click();
+    await expect(panel).toBeVisible();
+    await page.setViewportSize({ width: 641, height });
+    await expect(panel).not.toBeVisible();
+    await expect(trigger).not.toBeVisible();
+    await expect(page.locator('.languages')).toBeVisible();
+  });
+}
 
 test('original reviews, contact links and comparison survive language changes', async ({ page }) => {
   const externalFonts: string[] = [];
@@ -106,7 +162,7 @@ test('original reviews, contact links and comparison survive language changes', 
   await expect(page.locator('.footer-email')).toHaveAttribute('href', 'mailto:mail@electroservice.com');
   for (const lang of ['ru', 'en', 'cs']) {
     if (lang !== 'ru') {
-      await page.locator('.languages').getByRole('link', { name: lang.toUpperCase(), exact: true }).click();
+      await page.locator(`.languages a[lang="${lang}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('lang', lang);
     }
     const slider = page.locator('#comparison-range');
@@ -139,7 +195,7 @@ test('content remains available without JavaScript', async ({ browser }) => {
     await expect(form.locator('button[type="submit"]')).toBeDisabled();
     await expect(form.locator('[role="status"]')).toContainText('включите JavaScript');
   }
-  await page.locator('.languages').getByRole('link', { name: 'EN' }).click();
+  await page.locator('.languages a[lang="en"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await context.close();
 });
@@ -166,11 +222,14 @@ test('language changes keep the document alive and controls work after navigatio
   const documents: string[] = [];
   page.on('request', request => { if (request.resourceType() === 'document') documents.push(request.url()); });
 
+  const labels: Record<string, string> = { ru: 'RU', cs: 'CZ', en: 'EN' };
   for (const lang of ['en', 'cs', 'ru', 'en']) {
-    await page.locator('.languages').getByRole('link', { name: lang.toUpperCase(), exact: true }).click();
+    await page.locator('[data-menu-open]').click();
+    await page.locator(`.mobile-menu-languages a[lang="${lang}"]`).click();
     await expect(page.locator('html')).toHaveAttribute('lang', lang);
     await expect(page).toHaveURL(new RegExp(`/${lang}/$`));
-    await expect(page.locator('.languages [aria-current="page"]')).toHaveText(lang.toUpperCase());
+    await expect(page.locator('.mobile-menu-languages [aria-current="page"]')).toHaveText(labels[lang]);
+    await expect(page.locator('#mobile-menu-panel')).not.toBeVisible();
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
@@ -184,9 +243,10 @@ test('language changes keep the document alive and controls work after navigatio
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
   const menu = page.locator('.mobile-menu');
-  await menu.locator('summary').click();
-  await menu.getByRole('link', { name: 'Services', exact: true }).click();
-  await expect(menu).not.toHaveAttribute('open', '');
+  const panel = page.locator('#mobile-menu-panel');
+  await menu.locator('[data-menu-open]').click();
+  await panel.getByRole('link', { name: 'Services', exact: true }).click();
+  await expect(panel).not.toBeVisible();
   await page.getByRole('button', { name: 'Next service' }).click();
   await expect.poll(() => page.locator('#service-list').evaluate(el => el.scrollLeft)).toBeGreaterThan(100);
   expect(documents).toEqual([]);
@@ -203,7 +263,7 @@ test('lead form stays disabled when the API is absent or not accepting requests'
   await expect(page.locator('#contact .form-direct-contact a')).toHaveAttribute('href', 'tel:+420774411158');
 
   await page.route('**/api/healthz', route => route.fulfill({ status: 404, contentType: 'text/html', body: '<h1>Not found</h1>' }));
-  await page.locator('.languages').getByRole('link', { name: 'RU', exact: true }).click();
+  await page.locator('.languages a[lang="ru"]').click();
   await expect(page.locator('#contact #form-status')).toContainText('временно недоступен');
   await expect(page.locator('#contact [data-lead-form] button')).toBeDisabled();
   await expect(page.locator('.telegram-link').first()).toHaveAttribute('href', 'https://t.me/+420774411158');
@@ -325,7 +385,7 @@ test('language navigation ignores stale lead responses and initializes the curre
   await page.locator('#contact [name="consent"]').check();
   await page.locator('#contact [data-lead-form] button').click();
   await expect.poll(() => submitted).toBe(true);
-  await page.locator('.languages').getByRole('link', { name: 'CS', exact: true }).click();
+  await page.locator('.languages a[lang="cs"]').click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
   await expect(page.locator('#contact #phone')).toBeEnabled();
   releaseResponse();

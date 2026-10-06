@@ -1,5 +1,5 @@
 ---
-import { content, languages, type Language } from '../data/content';
+import { content, type Language } from '../data/content';
 import { company } from '../data/company';
 import { footerText } from '../data/footer';
 import LeadForm from './LeadForm.astro';
@@ -8,7 +8,6 @@ import '../styles/footer.css';
 
 const { lang } = Astro.props as { lang: Language };
 const t = footerText[lang];
-const languageNames = { cs: 'Čeština', en: 'English', ru: 'Русский' };
 ---
 <footer class="site-footer">
   <div class="footer-grid footer-container">
@@ -29,9 +28,6 @@ const languageNames = { cs: 'Čeština', en: 'English', ru: 'Русский' };
         <nav aria-labelledby="footer-projects-heading">
           <h2 id="footer-projects-heading">{t.projectsHeading}</h2>
           <ul>{t.projects.map(label => <li><a href="#portfolio">{label}</a></li>)}</ul>
-        </nav>
-        <nav class="footer-languages" aria-label={t.languageHeading}>
-          {languages.map(code => <a href={`/${code}/`} lang={code} aria-current={code === lang ? 'page' : undefined}>{languageNames[code]}</a>)}
         </nav>
       </div>
     </div>

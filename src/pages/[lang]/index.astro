@@ -9,6 +9,7 @@ import Reviews from '../../components/Reviews.astro';
 import MessengerLinks from '../../components/MessengerLinks.astro';
 import LeadForm from '../../components/LeadForm.astro';
 import Footer from '../../components/Footer.astro';
+import MobileMenu from '../../components/MobileMenu.astro';
 import Icon from '../../components/Icon.astro';
 import { statistics } from '../../data/statistics';
 import { ClientRouter } from 'astro:transitions';
@@ -20,6 +21,11 @@ const anchors = ['portfolio', 'services', 'about', 'contact'];
 const services = ['electrical', 'smart', 'solar', 'heat'];
 const partners = ['developers', 'designers', 'builders', 'architects'];
 const principles = ['safety', 'precision', 'timing', 'materials', 'approach', 'guarantee'];
+const headerLanguages = [
+  { code: 'ru', label: 'RU' },
+  { code: 'cs', label: 'CZ' },
+  { code: 'en', label: 'ENG' },
+] as const;
 ---
 <!doctype html>
 <html lang={lang} transition:animate="none">
@@ -43,12 +49,12 @@ const principles = ['safety', 'precision', 'timing', 'materials', 'approach', 'g
       <a href={`/${lang}/`} class="brand" aria-label="ART PROJECT"><img src="/images/logo.svg" alt="" width="84" height="70" /><span>ART<br />PROJECT</span></a>
       <nav class="desktop-nav" aria-label={t.menu}>{t.nav.map((label, i) => <a href={`#${anchors[i]}`}>{label}</a>)}</nav>
       <div class="header-contact"><a href={company.telephone}>{company.phone}</a><MessengerLinks lang={lang} compact /></div>
-      <div class="languages" aria-label="Language">{languages.map(code => <a href={`/${code}/`} lang={code} data-astro-prefetch aria-current={code === lang ? 'page' : undefined}>{code.toUpperCase()}</a>)}</div>
-      <details class="mobile-menu"><summary aria-label={t.menu}><Icon name="menu" /></summary><nav aria-label={t.menu}>{t.nav.map((label, i) => <a href={`#${anchors[i]}`}>{label}</a>)}</nav></details>
+      <div class="languages" aria-label="Language">{headerLanguages.map(({ code, label }) => <a href={`/${code}/`} lang={code} data-astro-prefetch aria-current={code === lang ? 'page' : undefined}>{label}</a>)}</div>
+      <MobileMenu lang={lang} />
     </header>
     <main id="main">
       <section class="hero container">
-        <div class="hero-copy"><p class="eyebrow">— {t.eyebrow}</p><p class="hero-brand" aria-hidden="true">ART<br />PROJECT</p><h1>{t.hero}</h1><p class="muted intro">{t.intro}</p><a class="button dark" href="#contact">{t.cta}<Icon name="arrow" /></a><ul class="hero-statistics">{(['10+', '100%', '250+'] as const).map((value, i) => <li><span class="statistic-icon"><Icon name={(['building', 'check', 'award'] as const)[i]} /></span><div><strong>{value}</strong><p>{statistics[lang][i]}</p></div></li>)}</ul></div>
+        <div class="hero-copy"><p class="eyebrow"><span>{t.eyebrow}</span></p><p class="hero-brand" aria-hidden="true">ART<br />PROJECT</p><h1>{t.hero}</h1><p class="muted intro">{t.intro}</p><a class="button dark" href="#contact">{t.cta}<Icon name="arrow" /></a><ul class="hero-statistics">{(['10+', '100%', '250+'] as const).map((value, i) => <li><span class="statistic-icon"><Icon name={(['building', 'check', 'award'] as const)[i]} /></span><div><strong>{value}</strong><p>{statistics[lang][i]}</p></div></li>)}</ul></div>
         <picture><source media="(max-width: 640px)" srcset="/images/hero-mobile.webp" width="430" height="900" /><img class="hero-image" src="/images/hero.webp" width="1048" height="1046" alt="" fetchpriority="high" /></picture>
       </section>
       <section id="services" class="services section">
@@ -57,7 +63,7 @@ const principles = ['safety', 'precision', 'timing', 'materials', 'approach', 'g
       </section>
       <section id="portfolio" class="container section work"><div class="section-heading"><div><p class="eyebrow green">{t.workLabel}</p><h2>{t.workTitle}</h2></div><p class="muted aside">{t.workIntro}</p></div><Comparison lang={lang} /></section>
       <section id="about" class="container section"><p class="eyebrow green">{t.principlesLabel}</p><h2>{t.principlesTitle}</h2><p class="muted section-intro">{t.principlesIntro}</p><ul class="principles">{t.principles.map(([title, description], i) => <li><div><h3>{title}</h3><p class="muted">{description}</p></div><img class="principle-image" src={`/images/principle-${principles[i]}.webp`} width="250" height="323" alt="" loading="lazy" decoding="async" /></li>)}</ul></section>
-      <section class="container section b2b"><div class="section-heading"><div><p class="eyebrow green">{t.b2bLabel}</p><h2>{t.b2bTitle}</h2></div><p class="muted aside">{t.b2bIntro}</p></div><ul class="partners">{t.partners.map(([title, description], i) => <li class={partners[i]}><div class="partner-copy"><h3>{title}</h3><p class="muted">{description}</p><a class="button light" href="#contact">{t.cooperate}<Icon name="arrow" /></a></div><img src={`/images/partner-${partners[i]}.webp`} alt="" width="462" height="360" loading="lazy" decoding="async" /></li>)}</ul></section>
+      <section class="container section b2b"><div class="section-heading"><div><p class="eyebrow green">{t.b2bLabel}</p><h2>{t.b2bTitle}</h2></div><p class="muted aside">{t.b2bMobileIntro ? <><span class="b2b-intro-desktop">{t.b2bIntro}</span><span class="b2b-intro-mobile">{t.b2bMobileIntro}</span></> : t.b2bIntro}</p></div><ul class="partners">{t.partners.map(([title, description], i) => <li class={partners[i]}><div class="partner-copy"><h3>{title}</h3><p class="muted">{description}</p><a class="button light" href="#contact">{t.cooperate}<Icon name="arrow" /></a></div><img src={`/images/partner-${partners[i]}.webp`} alt="" width="462" height="360" loading="lazy" decoding="async" /></li>)}</ul></section>
       <Reviews lang={lang} />
       <section id="contact" class="container section contact"><LeadForm lang={lang} /><div class="messenger"><img src="/images/messenger.webp" alt="" width="835" height="690" loading="lazy" decoding="async" /><div><h2>{t.messenger}</h2><p>{ui.messengerNote}</p><MessengerLinks lang={lang} /></div></div></section>
     </main>
@@ -81,15 +87,6 @@ const principles = ['safety', 'precision', 'timing', 'materials', 'approach', 'g
           const end = list.scrollWidth - list.clientWidth;
           const next = direction > 0 && list.scrollLeft >= end - 2 ? 0 : direction < 0 && list.scrollLeft <= 2 ? end : list.scrollLeft + direction * step;
           list.scrollTo({ left: next, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-        }
-        const menu = event.target.closest<HTMLDetailsElement>('.mobile-menu');
-        if (menu && event.target.closest('a')) menu.open = false;
-      });
-      document.addEventListener('keydown', event => {
-        const menu = document.querySelector<HTMLDetailsElement>('.mobile-menu');
-        if (event.key === 'Escape' && menu?.open) {
-          menu.open = false;
-          menu.querySelector('summary')?.focus();
         }
       });
     </script>
