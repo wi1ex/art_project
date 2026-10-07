@@ -6,6 +6,6 @@ const { lang, compact = false } = Astro.props as { lang: Language; compact?: boo
 const t = interfaceText[lang];
 ---
 <div class:list={['messenger-links', { 'messenger-links--compact': compact }]}>
-  <a href={company.telegram} target="_blank" rel="noopener noreferrer" aria-label={t.telegram} class="telegram-link"><img src="/images/telegram.svg" alt="" width="30" height="30" />{!compact && <span>{t.telegram}</span>}</a>
-  <a href={company.whatsapp} target="_blank" rel="noopener noreferrer" aria-label={t.whatsapp} class="whatsapp-link"><img src="/images/whatsapp.svg" alt="" width="30" height="30" />{!compact && <span>{t.whatsapp}</span>}</a>
+  <a href={company.telegram} target="_blank" rel="noopener noreferrer" aria-label={compact ? t.telegram : undefined} class="telegram-link"><img src="/images/telegram.svg" alt="" width="30" height="30" />{!compact && (t.mobileMessenger ? <><span class="messenger-copy-desktop">{t.telegram}</span><span class="messenger-copy-mobile">{t.mobileMessenger.telegram}</span></> : <span>{t.telegram}</span>)}</a>
+  <a href={company.whatsapp} target="_blank" rel="noopener noreferrer" aria-label={compact ? t.whatsapp : undefined} class="whatsapp-link"><img src="/images/whatsapp.svg" alt="" width="30" height="30" />{!compact && (t.mobileMessenger ? <><span class="messenger-copy-desktop">{t.whatsapp}</span><span class="messenger-copy-mobile">{t.mobileMessenger.whatsapp}</span></> : <span>{t.whatsapp}</span>)}</a>
 </div>

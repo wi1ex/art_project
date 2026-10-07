@@ -4,6 +4,7 @@ type Labels = {
   comparison: string; before: string; after: string; previous: string; next: string;
   projects: string[]; rating: string; reviews: string; translation: string;
   telegram: string; whatsapp: string; messengerNote: string; company: string;
+  mobileMessenger?: { title: string; note: string; telegram: string; whatsapp: string };
 };
 
 export const interfaceText: Record<Language, Labels> = {
@@ -14,6 +15,10 @@ export const interfaceText: Record<Language, Labels> = {
     telegram: 'Чат в Телеграм', whatsapp: 'Чат в WhatsApp', messengerNote: 'Быстрые ответы на вопросы и связь с менеджером', company: 'Компания',
   },
   en: {
+    mobileMessenger: {
+      title: 'Or write\nin any messenger', note: 'Quick answers to questions and contact with a manager',
+      telegram: 'Our Telegram', whatsapp: 'Our WhatsApp',
+    },
     comparison: 'Compare hidden systems and the finished space', before: 'Systems', after: 'Result',
     previous: 'Previous project', next: 'Next project', projects: ['Smart home', 'Solar energy', 'Heat pumps', 'Electrical installation'],
     rating: 'average rating', reviews: 'reviews', translation: 'Translated from Russian',

@@ -157,6 +157,7 @@
   .lead-honeypot { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .messenger { position: relative; isolation: isolate; border-radius: 16px; overflow: hidden; display: flex; align-items: end; padding: 78px 70px; color: white; min-height: 690px; background: #2c2d25; }
   .messenger h2 { letter-spacing: normal; }
+  .messenger-copy-mobile { display: none; }
   .messenger > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
   .messenger p { margin-block: 30px; color: #a8a8a8; font-size: clamp(14px, 1.04vw, 20px); font-weight: 400; }
   .messenger-links { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
@@ -266,17 +267,17 @@
     .partner-copy { padding: 12px 4px 0; }
     .partner-copy h3 { padding-inline: 6px; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: -.025em; }
     .partner-copy p { padding-inline: 6px; margin-block: 4px 20px; font-size: 14px; line-height: 20px; min-height: 40px; }
-    .partner-copy .button { width: 100%; font-weight: 500; gap: 16px; }
+    .partner-copy .button { width: 100%; font-weight: 600; gap: 10px; }
     .partner-copy .button .icon { width: 20px; height: 20px; }
     .b2b-intro-desktop { display: none; }
     .b2b-intro-mobile { display: inline; }
     .reviews .section-heading { display: flex; align-items: start; gap: 12px; }
     .reviews .section-heading { margin-bottom: 50px; }
     .reviews h2 { font-size: 30px; line-height: 40px; }
-    .rating { padding-top: 0; }
-    .rating strong { font-size: 44px; line-height: 50px; }
-    .rating .stars { gap: 3px; }
-    .rating .stars .icon { width: 17px; height: 17px; }
+    .rating { padding-top: 0; margin-top: -4px; }
+    .rating strong { font-size: 30px; line-height: 50px; }
+    .rating .stars { gap: 4px; }
+    .rating .stars .icon { width: 14px; height: 14px; }
     .rating p { font-size: 12px; }
     .review-strip { grid-auto-columns: calc(100% - 22px); gap: 16px; scroll-padding-inline: 23px; padding-inline: 23px; }
     .review-card { padding: 36px 30px 28px; min-height: 250px; border-radius: 10px; }
@@ -287,7 +288,7 @@
     .review-header .stars { position: absolute; right: -14px; top: 0; gap: 0; }
     .review-header .stars .icon { width: 13px; height: 13px; }
     .review-card blockquote { margin-top: 20px; font-size: 14px; line-height: 24px; font-weight: 400; }
-    .rating .translation-note { font-size: 10px; line-height: 16px; margin-top: 2px; }
+    .rating .translation-note { display: none; }
     .contact { grid-template-columns: 1fr; gap: 15px; }
     .contact-form { padding: 28px 32px; border-radius: 8px; min-height: 401px; }
     .contact h2 { font-size: 26px; line-height: 30px; }
@@ -299,11 +300,15 @@
     .consent { font-size: 12px; line-height: 18px; gap: 8px; margin-bottom: 24px; }
     .consent input { width: 16px; height: 16px; }
     .contact-form .consent input:checked::before { width: 4px; height: 7px; transform: translateY(-1px) rotate(45deg); }
-    .messenger { min-height: 386px; padding: 30px 32px; border-radius: 8px; }
+    .messenger { min-height: 386px; padding: 30px 32px 56px; border-radius: 8px; }
     .messenger p { font-size: 14px; line-height: 20px; margin-block: 24px 28px; }
     .messenger-links:not(.messenger-links--compact) { flex-direction: column; align-items: stretch; }
     .messenger-links:not(.messenger-links--compact) a { font-size: 16px; min-height: 54px; }
-    .messenger .messenger-links a { padding-block: 11px; }
+    .messenger .messenger-links { gap: 10px; }
+    .messenger .messenger-links a { padding-block: 11px; font-weight: 500; }
+    .messenger .messenger-links img { width: 26px; height: 26px; }
+    .messenger-copy-desktop { display: none; }
+    .messenger-copy-mobile { display: inline; }
 
   }
   @media (max-width: 360px) {

@@ -68,6 +68,7 @@
     .site-footer .lead-form-footer { margin-top: 18px; }
     .site-footer .lead-form-footer .lead-phone { min-height: 60px; border-radius: 10px; padding: 16px 62px 16px 20px; font-size: 16px; line-height: 26px; }
     .site-footer .lead-submit { width: 62px; height: 58px; font-size: 25px; }
+    .site-footer .lead-submit .icon { width: 22px; height: 22px; }
     .site-footer .lead-form-footer .consent { gap: 12px; margin-top: 22px; margin-bottom: 0; font-size: 14px; line-height: 20px; }
     .site-footer .lead-form-footer .consent input { width: 20px; height: 20px; flex-basis: 20px; }
     .site-footer .lead-form-footer .form-status { font-size: 12px; line-height: 18px; }
