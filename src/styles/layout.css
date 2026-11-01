@@ -10,6 +10,9 @@
     .site-canvas {
       width: 1920px;
       margin-inline: auto;
+      /* Keep text metrics independent of device-pixel hinting under zoom.
+         Otherwise Linux Chromium can rewrap lines in the scaled layout. */
+      text-rendering: geometricPrecision;
       /* Exclude a classic scrollbar from the available content width.
          zoom scales document height too, preserving native anchor scrolling. */
       zoom: min(1, tan(atan2(100cqw, 1920px)));

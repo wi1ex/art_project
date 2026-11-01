@@ -8,6 +8,8 @@ const selectors = [
 ] as const;
 
 async function geometry(page: Page) {
+  // Compare completed layouts rather than the asynchronous health-check label.
+  await expect(page.locator('#contact [role="status"]')).toHaveAttribute('data-state', 'error');
   await page.evaluate(() => document.fonts.ready);
   return page.evaluate(selectors => {
     const canvas = document.querySelector<HTMLElement>('.site-canvas')!;
