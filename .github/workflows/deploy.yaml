@@ -34,7 +34,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e -- --workers=2
       - run: bash tests/deploy-release.sh
-      - run: python -m unittest discover -s tests -p 'test_runtime_config.py' -v
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Validate HTTPS proxy configuration
         run: |
           docker run --rm --network none \
@@ -56,6 +56,70 @@ jobs:
           for language in ru en cs; do
             curl --fail --silent --show-error "http://127.0.0.1:8080/$language/" > /dev/null
           done
+          python - <<'PY'
+          import gzip
+          import http.client
+          import re
+
+          def get(path, request_headers=None):
+              connection = http.client.HTTPConnection('127.0.0.1', 8080, timeout=10)
+              try:
+                  connection.request('GET', path, headers=request_headers or {})
+                  response = connection.getresponse()
+                  return response.status, dict(response.getheaders()), response.read()
+              finally:
+                  connection.close()
+
+          def header(headers, name):
+              return next((value for key, value in headers.items() if key.lower() == name.lower()), '')
+
+          def assert_security_headers(headers):
+              assert header(headers, 'X-Content-Type-Options') == 'nosniff', headers
+              assert header(headers, 'X-Frame-Options') == 'DENY', headers
+              assert header(headers, 'Referrer-Policy') == 'strict-origin-when-cross-origin', headers
+
+          status, headers, _ = get('/?source=seo%20smoke&keep=1')
+          assert status == 308, (status, headers)
+          assert header(headers, 'Location') == '/cs/?source=seo%20smoke&keep=1', headers
+          assert_security_headers(headers)
+
+          status, _, body = get('/robots.txt')
+          assert status == 200, status
+          robots = body.decode('utf-8')
+          assert not re.search(r'^\s*Disallow:\s*/\s*$', robots, re.MULTILINE), robots
+          assert 'Sitemap: https://artprojectsro.cz/sitemap.xml' in robots, robots
+
+          for path in ('/api/healthz', '/healthz', '/privacy-policy.pdf'):
+              status, headers, _ = get(path)
+              assert status == 200, (path, status)
+              assert 'noindex' in header(headers, 'X-Robots-Tag').lower(), (path, headers)
+              assert_security_headers(headers)
+
+          status, _, body = get('/cs/')
+          assert status == 200, status
+          assets = re.findall(r'(?:src|href)="(/_astro/[^"\s]+)"', body.decode('utf-8'))
+          assert assets, 'The built page must reference its hashed Astro assets'
+          for path, cache_value in (
+              ('/images/logo.svg', 'public, max-age=604800'),
+              ('/fonts/manrope-5.woff2', 'public, max-age=604800'),
+              (assets[0], 'public, max-age=31536000, immutable'),
+          ):
+              status, headers, _ = get(path)
+              assert status == 200, (path, status)
+              assert header(headers, 'Cache-Control') == cache_value, (path, headers)
+              assert_security_headers(headers)
+
+          status, headers, _ = get('/images/seo-smoke-missing.svg')
+          assert status == 404, status
+          assert not header(headers, 'Cache-Control'), headers
+          assert_security_headers(headers)
+
+          status, headers, body = get('/sitemap.xml', {'Accept-Encoding': 'gzip'})
+          assert status == 200, status
+          assert header(headers, 'Content-Encoding') == 'gzip', headers
+          assert b'<urlset' in gzip.decompress(body), 'Expected a compressed XML sitemap'
+          print('Release HTTP redirects, crawl rules, headers, asset caching and XML compression passed.')
+          PY
           curl --fail --silent --show-error http://127.0.0.1:8080/api/healthz |
             python -c 'import json, sys; result = json.load(sys.stdin); assert result["status"] == "ok" and result["accepting_leads"] is False'
           status=$(curl --silent --show-error --output "$RUNNER_TEMP/leads-response.json" --write-out '%{http_code}' \
@@ -136,3 +200,6 @@ jobs:
           scp "${ssh_options[@]}" -P "$DEPLOY_PORT" release/* "$target:$remote/"
           ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" \
             "bash '$remote/release.sh' '$GITHUB_SHA' --runtime-config-stdin" < "$runtime_config"
+      - name: Notify search engines through IndexNow
+        continue-on-error: true
+        run: python3 deploy/notify_search.py

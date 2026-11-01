@@ -233,8 +233,8 @@ test('language changes keep the document alive and controls work after navigatio
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(initialTimeOrigin);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
-  await expect(page.locator('h1')).toContainText('Bringing construction');
-  await expect(page).toHaveTitle(/engineering solutions/);
+  await expect(page.locator('h1')).toContainText('Electrical installation');
+  await expect(page).toHaveTitle(/Electrical Installation in Prague/);
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /Electrical installation/);
 
   await page.goBack();

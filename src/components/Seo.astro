@@ -1,0 +1,94 @@
+---
+import { company } from '../data/company';
+import { content, languages, type Language } from '../data/content';
+
+const { lang } = Astro.props as { lang: Language };
+if (!Astro.site) throw new Error('The production URL is required for SEO metadata.');
+const site = Astro.site;
+const t = content[lang];
+const canonical = new URL(`/${lang}/`, site).href;
+const absolute = (path: string) => new URL(path, site).href;
+const locale = { cs: 'cs_CZ', en: 'en_GB', ru: 'ru_RU' } as const;
+const businessId = absolute('/#company');
+const websiteId = absolute('/#website');
+const image = absolute('/images/hero.webp');
+const graph = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Electrician',
+      '@id': businessId,
+      name: company.name,
+      legalName: company.name,
+      alternateName: 'ART PROJECT',
+      identifier: { '@type': 'PropertyValue', propertyID: 'IČO', value: company.ico },
+      url: absolute('/cs/'),
+      logo: absolute('/images/logo.svg'),
+      image,
+      telephone: company.telephone.replace('tel:', ''),
+      email: company.email,
+      address: { '@type': 'PostalAddress', ...company.addressDetails },
+      areaServed: { '@type': 'City', name: 'Praha' },
+      description: t.description,
+      hasOfferCatalog: {
+        '@type': 'OfferCatalog',
+        name: t.servicesTitle,
+        itemListElement: t.services.map(([name, description]) => ({
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name,
+            description,
+            provider: { '@id': businessId },
+            areaServed: { '@type': 'City', name: 'Praha' },
+          },
+        })),
+      },
+    },
+    {
+      '@type': 'WebSite',
+      '@id': websiteId,
+      url: absolute('/'),
+      name: 'ART PROJECT',
+      alternateName: company.name,
+      publisher: { '@id': businessId },
+      inLanguage: [...languages],
+    },
+    {
+      '@type': 'WebPage',
+      '@id': `${canonical}#webpage`,
+      url: canonical,
+      name: t.title,
+      description: t.description,
+      inLanguage: lang,
+      isPartOf: { '@id': websiteId },
+      about: { '@id': businessId },
+    },
+  ],
+};
+const structuredData = JSON.stringify(graph).replace(/</g, '\\u003c');
+---
+<title>{t.title}</title>
+<meta name="description" content={t.description} />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<link rel="canonical" href={canonical} />
+{languages.map(code => <link rel="alternate" hreflang={code} href={absolute(`/${code}/`)} />)}
+<link rel="alternate" hreflang="x-default" href={absolute('/cs/')} />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="ART PROJECT" />
+<meta property="og:title" content={t.title} />
+<meta property="og:description" content={t.description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:locale" content={locale[lang]} />
+{languages.filter(code => code !== lang).map(code => <meta property="og:locale:alternate" content={locale[code]} />)}
+<meta property="og:image" content={image} />
+<meta property="og:image:type" content="image/webp" />
+<meta property="og:image:width" content="1048" />
+<meta property="og:image:height" content="1046" />
+<meta property="og:image:alt" content={t.hero} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={t.title} />
+<meta name="twitter:description" content={t.description} />
+<meta name="twitter:image" content={image} />
+<meta name="twitter:image:alt" content={t.hero} />
+<script type="application/ld+json" set:html={structuredData} />

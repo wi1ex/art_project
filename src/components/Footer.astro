@@ -41,7 +41,7 @@ const t = footerText[lang];
         <p class="footer-address">{company.address[lang]}</p>
       </div>
       <div class="footer-legal">
-        <small>© {new Date().getFullYear()}, ART Project. {content[lang].rights}</small>
+        <small>© {new Date().getFullYear()}, {company.name} · IČO {company.ico}. {content[lang].rights}</small>
         <a class="footer-privacy" href="/privacy-policy.pdf" target="_blank" rel="noopener">{t.privacyPolicy}</a>
       </div>
       <div class="footer-messengers"><MessengerLinks lang={lang} compact /></div>

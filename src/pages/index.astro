@@ -1,5 +1,5 @@
 ---
-import { languages } from '../data/content';
+import { content, languages } from '../data/content';
 const languageNames = { cs: 'Čeština', en: 'English', ru: 'Русский' };
 const defaultLanguage = 'cs';
 const canonical = new URL(`/${defaultLanguage}/`, Astro.site);
@@ -9,7 +9,8 @@ const canonical = new URL(`/${defaultLanguage}/`, Astro.site);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex, nofollow" />
+    <meta name="robots" content="noindex, follow" />
+    <meta name="description" content={content.cs.description} />
     <meta name="theme-color" content="#ffffff" />
     <meta http-equiv="refresh" content="0;url=/cs/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -17,7 +18,7 @@ const canonical = new URL(`/${defaultLanguage}/`, Astro.site);
     {languages.map(code => <link rel="alternate" hreflang={code} href={new URL(`/${code}/`, Astro.site)} />)}
     <link rel="alternate" hreflang="x-default" href={canonical} />
     <meta property="og:url" content={canonical.href} />
-    <title>ART PROJECT — Čeština</title>
+    <title>{content.cs.title}</title>
   </head>
   <body>
     <main>
