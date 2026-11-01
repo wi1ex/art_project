@@ -1,13 +1,42 @@
 """Operator tools. No command sends a Telegram message."""
 import argparse
+import getpass
 import json
 import sqlite3
 import sys
+import warnings
 from datetime import datetime, timezone
 
 import httpx
 
 from backend.app import Settings
+from backend.auth import hash_password, validate_password
+from backend.storage import revoke_admins
+
+
+def reset_admin_password(db):
+    """Reset the shared password and revoke admins without startup recovery."""
+    try:
+        with warnings.catch_warnings():
+            # Refuse getpass's visible-input fallback when no terminal exists.
+            warnings.simplefilter('error', getpass.GetPassWarning)
+            candidate = getpass.getpass('Новый пароль администратора: ')
+            error = validate_password(candidate)
+            if error:
+                raise ValueError(error)
+            confirmation = getpass.getpass('Повторите новый пароль: ')
+    except getpass.GetPassWarning:
+        raise ValueError('Нужен интерактивный терминал. Запустите команду через SSH с TTY.') from None
+    if candidate != confirmation:
+        raise ValueError('Пароли не совпадают. Изменения не сохранены.')
+    encoded = hash_password(candidate)
+    with db:
+        db.execute(
+            "INSERT INTO bot_state(key,value) VALUES('admin_password_hash',?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (encoded,)
+        )
+        revoke_admins(db)
+    print('Пароль администратора обновлён. Все администраторы вышли; войдите в бота с новым паролем.')
 
 
 def telegram_chats(settings):
@@ -42,10 +71,12 @@ def telegram_chats(settings):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Inspect Telegram recipients and undelivered leads')
-    parser.add_argument('command', choices=('chats', 'pending', 'retry', 'mark-sent'))
+    parser = argparse.ArgumentParser(description='Inspect leads and manage the Telegram administrator password')
+    parser.add_argument('command', choices=('chats', 'pending', 'retry', 'mark-sent', 'reset-admin-password'))
     parser.add_argument('request_id', nargs='?')
     args = parser.parse_args()
+    if args.command == 'reset-admin-password' and args.request_id is not None:
+        parser.error('reset-admin-password accepts no password or request_id arguments')
     settings = Settings.from_env()
     if args.command == 'chats':
         telegram_chats(settings)
@@ -56,6 +87,9 @@ def main():
     db = sqlite3.connect(f'file:{settings.database_path}?mode=rw', uri=True, timeout=5)
     db.row_factory = sqlite3.Row
     try:
+        if args.command == 'reset-admin-password':
+            reset_admin_password(db)
+            return
         if args.command == 'pending':
             rows = db.execute("SELECT request_id, phone, created_at, state, error_code, attempts, delivered_to FROM leads WHERE state NOT IN ('sent','cancelled') ORDER BY created_at LIMIT 1000")
             for row in rows:
@@ -77,6 +111,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except (EOFError, KeyboardInterrupt):
+        print('Операция отменена; пароль не изменён.', file=sys.stderr)
+        sys.exit(1)
     except (ValueError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)

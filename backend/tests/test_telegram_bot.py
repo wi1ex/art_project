@@ -138,12 +138,12 @@ class TelegramBotTests(unittest.TestCase):
         self.assertEqual(text.count('Регистрация:'), 100)
         self.assertIn('href="https://t.me/user_100"', text)
 
-    def test_logout_removes_keyboard_and_requires_new_start_password(self):
+    def test_logout_replaces_admin_keyboard_and_requires_new_start_password(self):
         self.store.add_admin(42, 42, now=1000)
         self.store.accept('old', '+420774411158', admin_chats=self.store.admin_chats())
         asyncio.run(self.bot.handle_update(update(42, '/logout')))
         self.assertFalse(self.store.is_admin(42))
-        self.assertEqual(self.sender.messages[-1][2], {'remove_keyboard': True})
+        self.assertEqual(self.sender.messages[-1][2], self.bot.entry_keyboard())
         self.assertEqual(self.store.delivery_rows('old')[0]['state'], 'cancelled')
         self.assertEqual(self.store.get('old')['delivered_to'], '')
         for command in ('/week', '/admins', '12345678'):
