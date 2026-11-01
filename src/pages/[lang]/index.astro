@@ -2,6 +2,7 @@
 import { content, languages, type Language } from '../../data/content';
 import '../../styles/fonts.css';
 import '../../styles/global.css';
+import '../../styles/layout.css';
 import { company } from '../../data/company';
 import { interfaceText } from '../../data/interface';
 import Comparison from '../../components/Comparison.astro';
@@ -39,6 +40,7 @@ const headerLanguages = [
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
+    <div class="site-canvas">
     <a class="skip" href="#main">{t.skip}</a>
     <header class="header container">
       <a href={`/${lang}/`} class="brand" aria-label="ART PROJECT"><img src="/images/logo.svg" alt="" width="84" height="70" /><span>ART<br />PROJECT</span></a>
@@ -50,11 +52,11 @@ const headerLanguages = [
     <main id="main">
       <section class="hero container">
         <div class="hero-copy"><p class="eyebrow"><span>{t.eyebrow}</span></p><p class="hero-brand" aria-hidden="true">ART<br />PROJECT</p><h1>{t.hero}</h1><p class="muted intro">{t.intro}</p><a class="button dark" href="#contact">{t.cta}<Icon name="arrow" /></a><ul class="hero-statistics">{(['10+', '100%', '250+'] as const).map((value, i) => <li><span class="statistic-icon"><Icon name={(['building', 'check', 'award'] as const)[i]} /></span><div><strong>{value}</strong><p>{statistics[lang][i]}</p></div></li>)}</ul></div>
-        <picture><source media="(max-width: 640px)" srcset="/images/hero-mobile.webp" width="430" height="900" /><img class="hero-image" src="/images/hero.webp" width="1048" height="1046" alt="" fetchpriority="high" /></picture>
+        <picture><source media="(width < 1000px)" srcset="/images/hero-mobile.webp" width="430" height="900" /><img class="hero-image" src="/images/hero.webp" width="1048" height="1046" alt="" fetchpriority="high" /></picture>
       </section>
       <section id="services" class="services section">
         <div class="container center"><h2>{t.servicesTitle}</h2><p class="muted">{t.servicesIntro}</p><div class="arrows" data-carousel-controls><button type="button" data-slide="-1" aria-label={t.previous} aria-controls="service-list"><Icon name="arrow-prev" /></button><button type="button" data-slide="1" aria-label={t.next} aria-controls="service-list"><Icon name="arrow-control" /></button></div></div>
-        <ul id="service-list" class="service-grid">{t.services.map(([title, description], i) => <li><picture>{i === 0 && <source media="(max-width: 640px)" srcset="/images/service-electrical-mobile.webp" width="384" height="406" />}<img src={`/images/service-${services[i]}.webp`} width="489" height="430" alt={title} loading="lazy" decoding="async" /></picture><h3>{title}</h3><p class="muted">{description}</p></li>)}</ul>
+        <ul id="service-list" class="service-grid">{t.services.map(([title, description], i) => <li><picture>{i === 0 && <source media="(width < 1000px)" srcset="/images/service-electrical-mobile.webp" width="384" height="406" />}<img src={`/images/service-${services[i]}.webp`} width="489" height="430" alt={title} loading="lazy" decoding="async" /></picture><h3>{title}</h3><p class="muted">{description}</p></li>)}</ul>
       </section>
       <section id="portfolio" class="container section work"><div class="section-heading"><div><p class="eyebrow green">{t.workLabel}</p><h2>{t.workTitle}</h2></div><p class="muted aside">{t.workIntro}</p></div><Comparison lang={lang} /></section>
       <section id="about" class="container section"><p class="eyebrow green">{t.principlesLabel}</p><h2>{t.principlesTitle}</h2><p class="muted section-intro">{t.principlesIntro}</p><ul class="principles">{t.principles.map(([title, description], i) => <li><div><h3>{title}</h3><p class="muted">{description}</p></div><img class="principle-image" src={`/images/principle-${principles[i]}.webp`} width="250" height="323" alt="" loading="lazy" decoding="async" /></li>)}</ul></section>
@@ -63,6 +65,7 @@ const headerLanguages = [
       <section id="contact" class="container section contact"><LeadForm lang={lang} /><div class="messenger"><img src="/images/messenger.webp" alt="" width="835" height="690" loading="lazy" decoding="async" /><div><h2>{ui.mobileMessenger ? <><span class="messenger-copy-desktop">{t.messenger}</span><span class="messenger-copy-mobile">{ui.mobileMessenger.title}</span></> : t.messenger}</h2><p>{ui.mobileMessenger ? <><span class="messenger-copy-desktop">{ui.messengerNote}</span><span class="messenger-copy-mobile">{ui.mobileMessenger.note}</span></> : ui.messengerNote}</p><MessengerLinks lang={lang} /></div></div></section>
     </main>
     <Footer lang={lang} />
+    </div>
     <script>
       // Document listeners survive ClientRouter swaps; resolve the current DOM per event.
       document.addEventListener('click', event => {
@@ -77,7 +80,7 @@ const headerLanguages = [
           if (!list) return;
           const card = list.querySelector('li');
           const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
-          const step = (card?.getBoundingClientRect().width ?? list.clientWidth) + gap;
+          const step = (card?.offsetWidth ?? list.clientWidth) + gap;
           const direction = Number(button.dataset.slide);
           const end = list.scrollWidth - list.clientWidth;
           const next = direction > 0 && list.scrollLeft >= end - 2 ? 0 : direction < 0 && list.scrollLeft <= 2 ? end : list.scrollLeft + direction * step;

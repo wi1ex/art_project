@@ -26,17 +26,33 @@ const projects = ['smart', 'solar', 'heat', 'electrical'];
 </div>
 
 <script>
-  document.addEventListener('astro:page-load', () => {
-    if (!matchMedia('(max-width: 640px)').matches) return;
+  let disposeComparison = () => {};
+
+  function initializeComparison() {
+    disposeComparison();
     const root = document.querySelector('[data-comparison]');
     const range = root?.querySelector<HTMLInputElement>('.comparison-range');
-    if (range) { range.value = '64'; (root as HTMLElement).style.setProperty('--split', '64%'); }
-    root?.querySelectorAll<HTMLElement>('[data-scene]').forEach(scene => {
-      scene.hidden = scene.dataset.scene !== '2';
-    });
-    const name = root?.querySelector<HTMLElement>('[data-project-name]');
-    if (name?.dataset.names) name.textContent = JSON.parse(name.dataset.names)[2];
-  });
+    if (!(root instanceof HTMLElement) || !range) return;
+    const controller = new AbortController();
+    const mobile = matchMedia('(width < 1000px)');
+    const applyLayout = () => {
+      const index = mobile.matches ? 2 : 0;
+      range.value = mobile.matches ? '64' : '50';
+      root.style.setProperty('--split', `${range.value}%`);
+      root.querySelectorAll<HTMLElement>('[data-scene]').forEach(scene => {
+        scene.hidden = scene.dataset.scene !== String(index);
+      });
+      const name = root.querySelector<HTMLElement>('[data-project-name]');
+      if (name?.dataset.names) name.textContent = JSON.parse(name.dataset.names)[index];
+    };
+    applyLayout();
+    mobile.addEventListener('change', applyLayout, { signal: controller.signal });
+    disposeComparison = () => controller.abort();
+  }
+
+  document.addEventListener('astro:before-swap', () => disposeComparison());
+  document.addEventListener('astro:page-load', initializeComparison);
+  initializeComparison();
   document.addEventListener('input', event => {
     const range = event.target;
     if (!(range instanceof HTMLInputElement) || !range.matches('.comparison-range')) return;

@@ -1,5 +1,5 @@
 @layer responsive {
-  @media (max-width: 640px) {
+  @media (width < 1000px) {
     html:has(.mobile-menu-panel[open]) { overflow: hidden; }
     .mobile-menu-toggle { width: 44px; height: 44px; padding: 0; border: 0; display: grid; place-items: center; background: #eeeef0; color: #1a1a1a; border-radius: 10px; box-shadow: 0 4px 6px #0003; }
     .mobile-menu-toggle .icon { width: 26px; height: 26px; }

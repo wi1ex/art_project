@@ -1,7 +1,7 @@
 @layer components {
   .site-footer { padding-top: 0; background: #111; color: #969696; font-size: 22px; line-height: 28px; font-weight: 400; }
-  .site-footer .footer-container { width: calc(100% - clamp(48px, 6.875vw, 132px)); max-width: 1788px; margin-inline: auto; }
-  .site-footer .footer-grid { display: grid; grid-template-columns: minmax(280px, 353px) minmax(240px, 294px) minmax(220px, 294px) minmax(180px, 1fr); column-gap: clamp(32px, 4.167vw, 80px); padding-block: 89px 70px; min-height: 625px; }
+  .site-footer .footer-container { width: calc(100% - clamp(48px, calc(6.875 * var(--layout-vw)), 132px)); max-width: 1788px; margin-inline: auto; }
+  .site-footer .footer-grid { display: grid; grid-template-columns: minmax(280px, 353px) minmax(240px, 294px) minmax(220px, 294px) minmax(180px, 1fr); column-gap: clamp(32px, calc(4.167 * var(--layout-vw)), 80px); padding-block: 89px 70px; min-height: 625px; }
   .site-footer .footer-request-title { color: #fff; font-size: 32px; line-height: 42px; font-weight: 600; }
   .site-footer .footer-details { display: contents; }
   .site-footer .footer-column { font-size: 21px; color: #a0a0a0; }
@@ -45,21 +45,7 @@
 }
 
 @layer responsive {
-  @media (max-width: 1350px) {
-    .site-footer .footer-grid { grid-template-columns: minmax(240px, 1.1fr) repeat(3, minmax(0, 1fr)); gap: 32px; }
-    .site-footer .footer-request-title { font-size: 25px; line-height: 35px; }
-    .site-footer .footer-column { font-size: 18px; line-height: 26px; }
-    .site-footer .lead-form-footer .consent { font-size: 14px; line-height: 20px; }
-    .site-footer .footer-legal small { font-size: 14px; }
-    .site-footer .footer-legal .footer-privacy { font-size: 14px; }
-  }
-  @media (max-width: 900px) and (min-width: 641px) {
-    .site-footer .footer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: 0; }
-    .site-footer .footer-request { grid-column: 1 / -1; max-width: 460px; margin-bottom: 16px; }
-    .site-footer .footer-bottom { grid-template-columns: 1fr 1fr; min-height: 0; }
-    .site-footer .footer-legal { grid-column: 1 / -1; grid-row: 2; padding-top: 0; text-align: left; }
-  }
-  @media (max-width: 640px) {
+  @media (width < 1000px) {
     .site-footer { font-size: 14px; line-height: 20px; }
     .site-footer .footer-container { width: calc(100% - 40px); }
     .site-footer .footer-grid { grid-template-columns: 1fr 1fr; align-items: start; align-content: start; gap: 32px 24px; padding-block: 42px 0; min-height: 655px; }
@@ -88,11 +74,5 @@
     .site-footer .footer-legal { padding-top: 0; margin-top: 16px; order: 2; text-align: left; }
     .site-footer .footer-legal small { font-size: 12px; line-height: 18px; }
     .site-footer .footer-legal .footer-privacy { margin-top: 6px; font-size: 12px; line-height: 18px; }
-  }
-  @media (max-width: 360px) {
-    .site-footer .footer-grid { column-gap: 16px; }
-    .site-footer .footer-request-title { font-size: 20px; line-height: 29px; }
-    .site-footer .footer-column { font-size: 13px; line-height: 19px; }
-    .site-footer .lead-form-footer .consent { font-size: 12px; line-height: 18px; }
   }
 }

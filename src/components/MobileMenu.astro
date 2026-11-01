@@ -50,7 +50,7 @@ const currentLanguage = mobileLanguages.find(language => language.code === lang)
     if (!trigger || !panel) return;
     const controller = new AbortController();
     const options = { signal: controller.signal };
-    const mobile = matchMedia('(max-width: 640px)');
+    const mobile = matchMedia('(width < 1000px)');
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
     let animation: Animation | undefined;
     let closing = false;

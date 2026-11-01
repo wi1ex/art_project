@@ -46,7 +46,7 @@ test('root redirects to Czech without JavaScript', async ({ browser }) => {
   await context.close();
 });
 for (const lang of ['ru', 'en', 'cs']) {
-  for (const width of [360, 430, 768, 1440, 1920]) {
+  for (const width of [360, 430, 768, 999, 1000, 1440, 1920]) {
     test(`${lang}: layout and assets at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       const errors: string[] = [];
@@ -90,7 +90,7 @@ test('mobile navigation and service carousel', async ({ page }) => {
   await expect(page).toHaveURL(/\/cs\/$/);
 });
 
-for (const width of [320, 430, 640]) {
+for (const width of [320, 430, 768, 999]) {
   test(`mobile menu covers the viewport and preserves keyboard and language navigation at ${width}px`, async ({ page }) => {
     const height = 844;
     await page.setViewportSize({ width, height });
@@ -136,7 +136,7 @@ for (const width of [320, 430, 640]) {
 
     await trigger.click();
     await expect(panel).toBeVisible();
-    await page.setViewportSize({ width: 641, height });
+    await page.setViewportSize({ width: 1000, height });
     await expect(panel).not.toBeVisible();
     await expect(trigger).not.toBeVisible();
     await expect(page.locator('.languages')).toBeVisible();

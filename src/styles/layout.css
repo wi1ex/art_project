@@ -1,0 +1,22 @@
+@layer base {
+  :root { --layout-vw: 1vw; }
+  body { container-type: inline-size; }
+}
+
+@layer responsive {
+  @media (min-width: 1000px) {
+    :root { --layout-vw: 19.2px; }
+
+    .site-canvas {
+      width: 1920px;
+      margin-inline: auto;
+      /* Exclude a classic scrollbar from the available content width.
+         zoom scales document height too, preserving native anchor scrolling. */
+      zoom: min(1, tan(atan2(100cqw, 1920px)));
+    }
+
+    @supports (zoom: calc(1px / 1px)) {
+      .site-canvas { zoom: min(1, calc(100cqw / 1920px)); }
+    }
+  }
+}
