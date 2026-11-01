@@ -5,7 +5,8 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "80:8080"
+      # Host Caddy is the only public entry point (ports 80/443).
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -56,3 +57,12 @@ services:
 
 volumes:
   leads-data:
+
+networks:
+  default:
+    # Keep this gateway in sync with deploy/nginx.conf. Check for an existing
+    # overlapping subnet on the target host before creating this network.
+    ipam:
+      config:
+        - subnet: 172.30.89.0/24
+          gateway: 172.30.89.1

@@ -1,0 +1,15 @@
+# Install as /etc/caddy/Caddyfile and validate before reloading host Caddy.
+# Both names must resolve to this server; Caddy obtains and renews HTTPS itself.
+artprojectsro.cz {
+	reverse_proxy 127.0.0.1:8080 {
+		# Replace any client-supplied value; nginx trusts only the host gateway.
+		header_up X-Real-IP {remote_host}
+		# Lead submissions must never be repeated by either proxy.
+		lb_retries 0
+		lb_try_duration 0
+	}
+}
+
+www.artprojectsro.cz {
+	redir https://artprojectsro.cz{uri} 308
+}

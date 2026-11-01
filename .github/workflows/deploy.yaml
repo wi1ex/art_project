@@ -35,6 +35,11 @@ jobs:
       - run: npm run test:e2e -- --workers=2
       - run: bash tests/deploy-release.sh
       - run: python -m unittest discover -s tests -p 'test_runtime_config.py' -v
+      - name: Validate HTTPS proxy configuration
+        run: |
+          docker run --rm --network none \
+            --mount "type=bind,source=$PWD/deploy/Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Build and smoke-test release images
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
@@ -45,25 +50,25 @@ jobs:
           export APP_IMAGE="art-project:$GITHUB_SHA"
           export API_IMAGE="art-project-api:$GITHUB_SHA"
           export API_ENV_FILE="$RUNNER_TEMP/art-project-smoke.env"
-          printf 'LEADS_ENABLED=false\nLEADS_ALLOWED_ORIGINS=http://127.0.0.1\n' > "$API_ENV_FILE"
+          printf 'LEADS_ENABLED=false\nLEADS_ALLOWED_ORIGINS=http://127.0.0.1:8080\n' > "$API_ENV_FILE"
           trap 'docker compose -p smoke -f deploy/compose.production.yaml down --volumes --remove-orphans; rm -f "$API_ENV_FILE"' EXIT
           docker compose -p smoke -f deploy/compose.production.yaml up -d --wait --wait-timeout 90
           for language in ru en cs; do
-            curl --fail --silent --show-error "http://127.0.0.1/$language/" > /dev/null
+            curl --fail --silent --show-error "http://127.0.0.1:8080/$language/" > /dev/null
           done
-          curl --fail --silent --show-error http://127.0.0.1/api/healthz |
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/healthz |
             python -c 'import json, sys; result = json.load(sys.stdin); assert result["status"] == "ok" and result["accepting_leads"] is False'
           status=$(curl --silent --show-error --output "$RUNNER_TEMP/leads-response.json" --write-out '%{http_code}' \
-            -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1' \
+            -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:8080' \
             --data '{"phone":"+420774411158","consent":true,"request_id":"1b2fb96e-3456-4531-8ccc-6226df6ed560","website":""}' \
-            http://127.0.0.1/api/leads)
+            http://127.0.0.1:8080/api/leads)
           [[ "$status" == 503 ]]
           docker compose -p smoke -f deploy/compose.production.yaml down --volumes --remove-orphans
           rm -f "$API_ENV_FILE"
           trap - EXIT
           mkdir -p release
           docker save "art-project:$GITHUB_SHA" "art-project-api:$GITHUB_SHA" | gzip -1 > release/image.tar.gz
-          cp deploy/compose.production.yaml deploy/release.sh release/
+          cp deploy/compose.production.yaml deploy/release.sh deploy/Caddyfile release/
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:

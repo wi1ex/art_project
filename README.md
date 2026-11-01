@@ -1,6 +1,8 @@
 # Развёртывание на чистом сервере
 
-Нужен сервер **Ubuntu 24.04 LTS, x86_64**, публичный IP, SSH на порту **22** и свободный порт **80**. Подключитесь к серверу под `root`. Все команды ниже выполняются там; настройки GitHub — в браузере.
+Перенос на **85.255.10.199**, домен **artprojectsro.cz**, HTTPS и настройка SSH по ключам описаны в [инструкции миграции](deploy/MIGRATION.md). Для этого сервера Docker и Compose уже установлены.
+
+Нужен сервер **Ubuntu 24.04 LTS, x86_64**, публичный IP, SSH на порту **22** и свободные порты **80** и **443**. Подключитесь к серверу под `root`. Все команды ниже выполняются там; настройки GitHub — в браузере. Веб-контейнер доступен только на `127.0.0.1:8080`; публичный HTTPS обслуживает Caddy по инструкции миграции.
 
 ## 1. Установить Docker и Compose
 
@@ -41,10 +43,11 @@ install -d -o deploy -g deploy -m 750 /opt/art-project
 install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
 ufw allow 22/tcp
 ufw allow 80/tcp
+ufw allow 443/tcp
 ufw --force enable
 ```
 
-Если у провайдера есть firewall, разрешите TCP **22** и **80** также в его панели.
+Если у провайдера есть firewall, разрешите TCP **22**, **80** и **443** также в его панели. При другом порте SSH разрешите его до включения firewall. В production используется Docker-сеть `172.30.89.0/24`: перед деплоем проверьте отсутствие пересечений, как описано в инструкции миграции.
 
 ## 3. Создать ключ для GitHub Actions
 
@@ -74,7 +77,7 @@ ssh -i /root/.ssh/art-project-actions -o IdentitiesOnly=yes -o HostKeyAlgorithms
 | `DEPLOY_SSH_KEY` | Приватный ключ из команды ниже целиком, с BEGIN/END и переносами строк |
 | `DEPLOY_KNOWN_HOSTS` | Строка из следующей команды целиком |
 | `TELEGRAM_BOT_TOKEN` | Токен бота от [BotFather](https://t.me/BotFather) |
-| `TELEGRAM_ADMIN_PASSWORD` | `12345678` |
+| `TELEGRAM_ADMIN_PASSWORD` | Длинный уникальный пароль администратора бота |
 
 Получите приватный ключ и скопируйте его в `DEPLOY_SSH_KEY`:
 
@@ -101,7 +104,7 @@ rm -f /root/.ssh/art-project-actions
 | Имя | Значение |
 | --- | --- |
 | `LEADS_ENABLED` | `true` |
-| `LEADS_ALLOWED_ORIGINS` | `http://IP_СЕРВЕРА` — подставьте публичный IP, без `/` в конце |
+| `LEADS_ALLOWED_ORIGINS` | `https://artprojectsro.cz` — без `/` в конце |
 | `TELEGRAM_RETRY_SECONDS` | `300` |
 
 Не добавляйте приватный ключ и токен в Git. Файл настроек на сервере будет создан автоматически при деплое.
@@ -117,14 +120,14 @@ rm -f /root/.ssh/art-project-actions
 На сервере выполните:
 
 ```bash
-curl --fail http://127.0.0.1/healthz
-curl --fail http://127.0.0.1/api/healthz
+curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:8080/api/healthz
 cd /opt/art-project
 docker compose -p art-project --env-file current/release.env -f current/compose.production.yaml ps
 ```
 
 Ожидаются `ok` от сайта, `status: "ok"` и `accepting_leads: true` от API, два контейнера со статусом **`healthy`**. Если `accepting_leads: false`, проверьте настройки **Environment variables** из шага 4, затем повторите деплой.
 
-Откройте `http://IP_СЕРВЕРА/` в браузере. В личном чате с ботом отправьте `/start`, затем пароль `12345678` отдельным сообщением. **Авторизуйте все нужные личные чаты до тестовой заявки.**
+Настройте Caddy и DNS по [инструкции миграции](deploy/MIGRATION.md), затем откройте `https://artprojectsro.cz/` в браузере. В личном чате с ботом отправьте `/start`, затем выбранный пароль администратора отдельным сообщением. **Авторизуйте все нужные личные чаты до тестовой заявки.**
 
 Отправьте одну заявку с сайта: уведомление должно прийти всем авторизованным администраторам. Нажмите кнопку **«Посмотреть все заявки за неделю»** и проверьте заявку в списке.

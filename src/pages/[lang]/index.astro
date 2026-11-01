@@ -15,6 +15,7 @@ import { statistics } from '../../data/statistics';
 import { ClientRouter } from 'astro:transitions';
 export function getStaticPaths() { return languages.map(lang => ({ params: { lang } })); }
 const lang = Astro.params.lang as Language;
+const canonical = new URL(`/${lang}/`, Astro.site);
 const t = content[lang];
 const ui = interfaceText[lang];
 const anchors = ['portfolio', 'services', 'about', 'contact'];
@@ -38,10 +39,13 @@ const headerLanguages = [
     <meta name="theme-color" content="#ffffff" />
     <title>{t.title}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    {languages.map(code => <link rel="alternate" hreflang={code} href={`/${code}/`} />)}
+    <link rel="canonical" href={canonical} />
+    {languages.map(code => <link rel="alternate" hreflang={code} href={new URL(`/${code}/`, Astro.site)} />)}
+    <link rel="alternate" hreflang="x-default" href={new URL('/cs/', Astro.site)} />
     <meta property="og:title" content={t.title} />
     <meta property="og:description" content={t.description} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical.href} />
   </head>
   <body>
     <a class="skip" href="#main">{t.skip}</a>
