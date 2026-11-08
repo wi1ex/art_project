@@ -105,7 +105,7 @@
   .principles li > div { position: relative; z-index: 1; width: 55%; }
   .principles h3 { font-size: clamp(18px, calc(1.2 * var(--layout-vw)), 23px); margin-bottom: 16px; }
   .principles p { font-size: clamp(14px, calc(1.04 * var(--layout-vw)), 20px); line-height: 1.5; }
-  .principle-image { position: absolute; right: 0; bottom: 0; width: min(250px, 45%); height: 100%; object-fit: contain; object-position: right bottom; }
+  .principle-image { position: absolute; right: 0; bottom: 0; height: 100%; object-fit: contain; object-position: right bottom; }
   .principles li:hover { background: #64764f; color: white; }
   .principles li:hover .muted { color: #edf1e8; }
   .b2b-intro-mobile { display: none; }
