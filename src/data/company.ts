@@ -5,7 +5,7 @@ export const company = {
   telephone: 'tel:+420774411158',
   telegram: 'https://t.me/+420774411158',
   whatsapp: 'https://wa.me/420774411158',
-  email: 'mail@electroservice.com',
+  email: 'artproject.abramovkos@seznam.cz',
   address: {
     ru: '5. května 1007/3, Nusle, 140 00 Praha 4, Чехия',
     en: '5. května 1007/3, Nusle, 140 00 Praha 4, Czech Republic',

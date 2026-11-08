@@ -109,7 +109,7 @@ for (const width of [320, 430, 768, 999]) {
     await expect(panel.locator('.mobile-menu-languages a')).toHaveText(['CZ', 'RU', 'EN']);
     await expect(panel.locator('.mobile-menu-contacts a[href^="tel:"]')).toHaveAttribute('href', 'tel:+420774411158');
     const email = panel.locator('.mobile-menu-contacts a[href^="mailto:"]');
-    await expect(email).toHaveAttribute('href', 'mailto:mail@electroservice.com');
+    await expect(email).toHaveAttribute('href', 'mailto:artproject.abramovkos@seznam.cz');
     await expect(email).toBeInViewport();
 
     const scrollPosition = await page.evaluate(() => scrollY);
@@ -170,7 +170,7 @@ test('mixed-language reviews, contact links and comparison survive language chan
   for (const link of await page.locator('.whatsapp-link').all()) {
     await expect(link).toHaveAttribute('href', 'https://wa.me/420774411158');
   }
-  await expect(page.locator('.footer-email')).toHaveAttribute('href', 'mailto:mail@electroservice.com');
+  await expect(page.locator('.footer-email')).toHaveAttribute('href', 'mailto:artproject.abramovkos@seznam.cz');
   for (const lang of ['ru', 'en', 'cs']) {
     if (lang !== 'ru') {
       await page.locator(`.languages a[lang="${lang}"]`).click();
@@ -199,6 +199,7 @@ test('mixed-language reviews, contact links and comparison survive language chan
 for (const width of [430, 1440]) {
   test(`horizontal review scrolling wraps in both directions at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/ru/');
     const strip = page.locator('.review-strip');
     await expect(strip.locator('.review-card[aria-hidden="true"]').first()).toBeAttached();
@@ -223,6 +224,40 @@ for (const width of [430, 1440]) {
     await expect.poll(async () => Math.abs((await readTrack()).last)).toBeLessThan(2);
   });
 }
+
+test('visible reviews advance on their own and can be paused and resumed', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.clock.install();
+  await page.goto('/en/');
+  const strip = page.locator('.review-strip');
+  const toggle = page.locator('[data-review-autoplay]');
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText('Pause');
+
+  const position = () => strip.evaluate(element => element.scrollLeft);
+  const { start, step } = await strip.evaluate(element => {
+    const originals = element.querySelectorAll<HTMLElement>('.review-card:not([aria-hidden])');
+    return { start: element.scrollLeft, step: originals[2].offsetLeft - originals[0].offsetLeft };
+  });
+  await expect(strip).not.toBeInViewport();
+  await page.clock.fastForward(4000);
+  expect(await position()).toBeCloseTo(start, 0);
+
+  await strip.scrollIntoViewIfNeeded();
+  await expect.poll(async () => Math.abs(await position() - (start + step)), { timeout: 6000 }).toBeLessThan(2);
+  await toggle.click();
+  await expect(toggle).toHaveText('Resume');
+  await strip.scrollIntoViewIfNeeded();
+  const pausedAt = await position();
+  await page.clock.fastForward(7000);
+  expect(await position()).toBeCloseTo(pausedAt, 0);
+
+  await toggle.click();
+  await expect(toggle).toHaveText('Pause');
+  await strip.scrollIntoViewIfNeeded();
+  await expect.poll(async () => Math.abs(await position() - (pausedAt + step)), { timeout: 6000 }).toBeLessThan(2);
+});
 
 test('content remains available without JavaScript', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });

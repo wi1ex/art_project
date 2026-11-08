@@ -11,9 +11,14 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
 <section id="reviews" class="section reviews" aria-labelledby="reviews-heading">
   <div class="container section-heading">
     <div><p class="eyebrow green">{t.reviewsLabel}</p><h2 id="reviews-heading">{t.reviewsTitle}</h2></div>
-    <div class="rating"><span class="stars" aria-hidden="true">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span><strong aria-label={`${labels.rating}: ${reviewSummary.rating}`}>{reviewSummary.rating}</strong><p>{labels.rating} · {reviewSummary.count} {labels.reviews}</p>{labels.translation && <small class="translation-note">{labels.translation}</small>}</div>
+    <div class="rating">
+      <span class="stars" aria-hidden="true">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span>
+      <strong aria-label={`${labels.rating}: ${reviewSummary.rating}`}>{reviewSummary.rating}</strong>
+      <p>{labels.rating} · {reviewSummary.count} {labels.reviews}</p>
+      <button class="review-autoplay" type="button" data-review-autoplay data-pause={labels.pauseReviews} data-resume={labels.resumeReviews} aria-controls="review-strip" hidden>{labels.pauseReviews}</button>
+    </div>
   </div>
-  <div class="review-strip" tabindex="0" role="region" aria-label={t.reviewsLabel}>
+  <div class="review-strip" id="review-strip" tabindex="0" role="region" aria-label={t.reviewsLabel}>
     {ordered.map(review => (
       <article class="review-card" lang={review.lang}>
         <div class="review-header"><span class="avatar" style={`--avatar: ${review.color}`} aria-hidden="true"></span><div><h3>{review.name}</h3><p>{review.role[review.lang]}</p></div><span class="stars" aria-label="5 / 5">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span></div>
@@ -23,12 +28,27 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
   </div>
 </section>
 
+<style>
+  .review-autoplay {
+    min-height: 44px;
+    padding-inline: 12px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 6px;
+    background: #f4f4f2;
+    color: #333;
+    font-size: 13px;
+  }
+  .review-autoplay:hover { background: #e9eee4; }
+</style>
+
 <script>
   let disposeReviewLoop = () => {};
 
   function initializeReviewLoop() {
     const strip = document.querySelector<HTMLElement>('.review-strip');
-    if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+    const toggle = document.querySelector<HTMLButtonElement>('[data-review-autoplay]');
+    if (!strip || !toggle || strip.scrollWidth <= strip.clientWidth) return;
 
     const cards = [...strip.querySelectorAll<HTMLElement>('.review-card')];
     const duplicateCards = () => cards.map(card => {
@@ -51,14 +71,22 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
     strip.append(...after);
 
     const controller = new AbortController();
+    const { signal } = controller;
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
     let start = 0;
     let end = 0;
+    let step = 0;
     let idleTimer: ReturnType<typeof setTimeout>;
+    let autoplayTimer: ReturnType<typeof setTimeout>;
+    let inView = false;
+    let paused = false;
+    let activePointer: number | undefined;
 
     function measure() {
       const origin = before[0].offsetLeft;
       start = cards[0].offsetLeft - origin;
       end = after[0].offsetLeft - origin;
+      step = cards[2].offsetLeft - cards[0].offsetLeft;
     }
 
     const recenter = () => {
@@ -66,6 +94,20 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
       // Allow for fractional CSS pixels when the desktop layout is scaled.
       if (left < start - 1) strip.scrollTo({ left: left + start, behavior: 'instant' });
       else if (left >= end - 1) strip.scrollTo({ left: left - (end - start), behavior: 'instant' });
+    };
+
+    const scheduleAutoplay = () => {
+      clearTimeout(autoplayTimer);
+      if (!inView || paused || reducedMotion.matches || document.hidden || activePointer !== undefined || strip.matches(':focus-within')) return;
+      autoplayTimer = setTimeout(() => {
+        strip.scrollBy({ left: step, behavior: 'smooth' });
+        scheduleAutoplay();
+      }, 3200);
+    };
+
+    const settleScroll = () => {
+      recenter();
+      scheduleAutoplay();
     };
 
     measure();
@@ -76,19 +118,57 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
     });
     resize.observe(strip);
 
+    const intersection = new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      scheduleAutoplay();
+    });
+    intersection.observe(strip);
+
     if ('onscrollend' in window) {
-      strip.addEventListener('scrollend', recenter, { signal: controller.signal });
+      strip.addEventListener('scrollend', settleScroll, { signal });
     } else {
       strip.addEventListener('scroll', () => {
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(recenter, 150);
-      }, { passive: true, signal: controller.signal });
+        idleTimer = setTimeout(settleScroll, 150);
+      }, { passive: true, signal });
     }
+
+    const syncMotionPreference = () => {
+      toggle.hidden = reducedMotion.matches;
+      scheduleAutoplay();
+    };
+    syncMotionPreference();
+    reducedMotion.addEventListener('change', syncMotionPreference, { signal });
+    document.addEventListener('visibilitychange', scheduleAutoplay, { signal });
+    toggle.addEventListener('click', () => {
+      paused = !paused;
+      toggle.textContent = paused ? toggle.dataset.resume! : toggle.dataset.pause!;
+      if (paused) strip.scrollTo({ left: strip.scrollLeft, behavior: 'instant' });
+      scheduleAutoplay();
+    }, { signal });
+    strip.addEventListener('focus', scheduleAutoplay, { signal });
+    strip.addEventListener('blur', scheduleAutoplay, { signal });
+    strip.addEventListener('wheel', event => {
+      if (event.deltaX || event.shiftKey) scheduleAutoplay();
+    }, { passive: true, signal });
+    strip.addEventListener('pointerdown', event => {
+      activePointer = event.pointerId;
+      scheduleAutoplay();
+    }, { passive: true, signal });
+    const endPointer = (event: PointerEvent) => {
+      if (event.pointerId !== activePointer) return;
+      activePointer = undefined;
+      scheduleAutoplay();
+    };
+    window.addEventListener('pointerup', endPointer, { signal });
+    window.addEventListener('pointercancel', endPointer, { signal });
 
     disposeReviewLoop = () => {
       controller.abort();
       resize.disconnect();
+      intersection.disconnect();
       clearTimeout(idleTimer);
+      clearTimeout(autoplayTimer);
     };
   }
 

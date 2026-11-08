@@ -70,7 +70,7 @@ const headerLanguages = [
               <li data-service={service}>
                 <picture>
                   {service === 'electrical' && <source media="(width < 1000px)" srcset="/images/service-electrical-mobile.webp" width="384" height="406" />}
-                  <img src={`/images/service-${service}.webp`} width="489" height="430" alt={title} loading="lazy" decoding="async" />
+                  <img src={service === 'heat' ? '/images/service-heat-illustration.webp' : `/images/service-${service}.webp`} width="489" height="430" alt={title} loading="lazy" decoding="async" />
                 </picture>
                 <h3>{title}</h3>
                 <p class="muted">{description}</p>
