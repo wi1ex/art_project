@@ -196,7 +196,7 @@
     .hero-statistics { display: none; }
     .button { min-height: 54px; padding: 14px 30px; font-size: 16px; line-height: 24px; gap: 16px; }
     .button .icon { width: 26px; height: 25px; }
-    .hero .button { width: 225px; }
+    .hero .button { width: 240px; }
     .center { text-align: left; }
     .center p { margin-top: 12px; max-width: 330px; padding-left: 2px; }
     .services { margin-top: 80px; }
@@ -205,7 +205,7 @@
     .arrows .icon, .arrow .icon { width: 28px; height: 28px; }
     .service-grid { gap: 24px; scroll-padding-inline: 23px; padding-inline: 23px; padding-bottom: 0; }
     .service-grid li { flex-basis: 100%; }
-    .service-grid img { aspect-ratio: 384 / 406; border-radius: 10px; }
+    .service-grid img { border-radius: 10px; }
     .service-grid h3 { font-size: 16px; font-weight: 400; line-height: 24px; margin-block: 18px 10px; padding-left: 2px; }
     .service-grid p { font-size: 14px; line-height: 20px; }
     .section-heading, .b2b .section-heading { display: block; margin-bottom: 56px; }
