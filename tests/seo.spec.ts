@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const origin = 'https://artprojectsro.cz';
 const languages = ['cs', 'en', 'ru'] as const;
-const locations = { cs: 'Praze', en: 'Prague', ru: 'Праге' };
+const titleLocations = { cs: /Praha/, en: /Prague/, ru: /Праге/ };
 
 for (const lang of languages) {
   test(`${lang}: crawlers receive localized metadata and matching company data without JavaScript`, async ({ browser, request }) => {
@@ -13,10 +13,10 @@ for (const lang of languages) {
     const canonical = `${origin}/${lang}/`;
     await expect(page.locator('html')).toHaveAttribute('lang', lang);
     await expect(page).toHaveTitle(/ART PROJECT/);
+    await expect(page).toHaveTitle(titleLocations[lang]);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /ART Project s\.r\.o\./);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /^index, follow,/);
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page.locator('h1')).toContainText(locations[lang]);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical);
     for (const alternative of languages) {
       await expect(page.locator(`link[hreflang="${alternative}"]`)).toHaveAttribute('href', `${origin}/${alternative}/`);
