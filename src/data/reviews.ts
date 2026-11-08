@@ -1,6 +1,7 @@
 import type { Language } from './content';
 
 type Review = {
+  lang: Language;
   name: string;
   role: Record<Language, string>;
   text: Record<Language, string>;
@@ -10,10 +11,10 @@ type Review = {
 // Rating summary from the approved design; the cards below are a selection.
 export const reviewSummary = { rating: '5.0', count: '96+' } as const;
 
-// Transcribed from the client-supplied «Отзывы.png»; EN/CS are translations.
+// Transcribed from the client-supplied «Отзывы.png». Each card has a fixed display language.
 export const reviews: Review[] = [
   {
-    name: 'Алексей Иванов', color: '#099b2d',
+    lang: 'en', name: 'Alexey Ivanov', color: '#099b2d',
     role: { ru: 'Дизайнер интерьеров', en: 'Interior designer', cs: 'Interiérový designér' },
     text: {
       ru: 'Работал над проектом кафе, где важно было создать уютную атмосферу. Светильники подобрали идеально, что подчеркнуло стиль и комфорт помещения.',
@@ -22,7 +23,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Наталья Громова', color: '#0b8da1',
+    lang: 'cs', name: 'Natalja Gromovová', color: '#0b8da1',
     role: { ru: 'Владелица салона', en: 'Salon owner', cs: 'Majitelka salonu' },
     text: {
       ru: 'Делали освещение в салоне. Помогли с подбором светильников, рассчитали цветовую температуру. Клиенты говорят, что свет стал совсем другим — живым.',
@@ -31,7 +32,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Игорь Лебедев', color: '#3e58e5',
+    lang: 'ru', name: 'Игорь Лебедев', color: '#3e58e5',
     role: { ru: 'Дизайнер интерьеров', en: 'Interior designer', cs: 'Interiérový designér' },
     text: {
       ru: 'Мы обновляли освещение в офисе. Результат превзошел ожидания — пространство стало ярче и уютнее, сотрудники стали работать продуктивнее.',
@@ -40,7 +41,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Карина Лыткина', color: '#9036fb',
+    lang: 'en', name: 'Karina Lytkina', color: '#9036fb',
     role: { ru: 'Владелица кафе', en: 'Café owner', cs: 'Majitelka kavárny' },
     text: {
       ru: 'Переоснащали кафе светом для создания особой атмосферы. Гости заметили уют и комфорт, атмосфера стала теплой и располагающей к долгому отдыху.',
@@ -49,7 +50,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Игорь Белов', color: '#4a5f31',
+    lang: 'ru', name: 'Игорь Белов', color: '#4a5f31',
     role: { ru: 'Архитектор', en: 'Architect', cs: 'Architekt' },
     text: {
       ru: 'Регулярно рекомендую своим клиентам. Умеют работать по рабочей документации, понимают архитектурный замысел и не «улучшают» проект по своему.',
@@ -58,7 +59,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Елена Морозова', color: '#3e58e5',
+    lang: 'en', name: 'Elena Morozova', color: '#3e58e5',
     role: { ru: 'Владелица кафе', en: 'Café owner', cs: 'Majitelka kavárny' },
     text: {
       ru: 'Провели электрику в кафе с нуля. Всё по нормам, прошли проверку с первого раза. Отдельное спасибо за аккуратность — ремонт не пришлось переделывать.',
@@ -67,7 +68,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Александр Петров', color: '#4b5563',
+    lang: 'cs', name: 'Alexandr Petrov', color: '#4b5563',
     role: { ru: 'Владелец квартиры', en: 'Apartment owner', cs: 'Majitel bytu' },
     text: {
       ru: 'Сделали полный электромонтаж в трёхкомнатной квартире. Работали чисто, укладывались в сроки. Все скрыто, никаких торчащих проводов. Очень доволен результатом.',
@@ -76,7 +77,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Марина Соколова', color: '#ce2729',
+    lang: 'ru', name: 'Марина Соколова', color: '#ce2729',
     role: { ru: 'Дизайнер интерьеров', en: 'Interior designer', cs: 'Interiérová designérka' },
     text: {
       ru: 'Работаю с ними на всех своих объектах уже два года. Единственные, кто реально читает проектную документацию и делает по чертежам, а не «на глазок».',
@@ -85,7 +86,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Дмитрий Казаков', color: '#ce9e00',
+    lang: 'en', name: 'Dmitry Kazakov', color: '#ce9e00',
     role: { ru: 'Владелец дома', en: 'Homeowner', cs: 'Majitel domu' },
     text: {
       ru: 'Установили умный дом под ключ: свет, климат, шторы, безопасность. Всё работает через один телефон. Уже полгода — ни одного сбоя.',
@@ -94,7 +95,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Ольга Иванова', color: '#7244ef',
+    lang: 'cs', name: 'Olga Ivanovová', color: '#7244ef',
     role: { ru: 'Руководитель проекта', en: 'Project lead', cs: 'Vedoucí projektu' },
     text: {
       ru: 'Очень профессиональная команда. Смета совпала с итоговым счётом — для меня это главный показатель честности подрядчика. Рекомендую.',
@@ -103,7 +104,7 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Сергей Волков', color: '#ce2729',
+    lang: 'ru', name: 'Сергей Волков', color: '#ce2729',
     role: { ru: 'Девелопер', en: 'Developer', cs: 'Developer' },
     text: {
       ru: 'Закрыли для нас два объекта параллельно. Сроки, качество, документация — всё на уровне. Продолжаем сотрудничество.',
@@ -112,21 +113,12 @@ export const reviews: Review[] = [
     },
   },
   {
-    name: 'Елена Соколовская', color: '#0b8da1',
+    lang: 'cs', name: 'Jelena Sokolovská', color: '#0b8da1',
     role: { ru: 'Менеджер проекта', en: 'Project manager', cs: 'Projektová manažerka' },
     text: {
       ru: 'Реализовали комплексное освещение офиса, учитывая эргономику и энергосбережение. В итоге повысилась работоспособность и снизился расход электроэнергии.',
       en: 'They delivered a complete office lighting system with ergonomics and energy efficiency in mind. The result was improved productivity and lower electricity consumption.',
       cs: 'Realizovali komplexní osvětlení kanceláře s ohledem na ergonomii a úsporu energie. Výsledkem je vyšší pracovní výkonnost a nižší spotřeba elektřiny.',
-    },
-  },
-  {
-    name: 'Марина Ковальчук', color: '#800daa',
-    role: { ru: 'Управляющая офисом', en: 'Office manager', cs: 'Správkyně kanceláře' },
-    text: {
-      ru: 'Обращались за монтажом освещения и сборкой распределительного щита для офиса. Всё сделали быстро, качественно и с соблюдением всех норм. Теперь точно знаем, к кому обращаться в будущем.',
-      en: 'We hired them to install office lighting and assemble the distribution board. Everything was done quickly, to a high standard and in compliance with regulations. We now know exactly who to call in future.',
-      cs: 'Obrátili jsme se na ně kvůli montáži osvětlení a sestavení rozvaděče pro kancelář. Vše udělali rychle, kvalitně a podle norem. Teď přesně víme, na koho se v budoucnu obrátit.',
     },
   },
 ];

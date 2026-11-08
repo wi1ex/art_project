@@ -9,7 +9,7 @@ test('root entry always opens Czech without a locale request', async ({ page }) 
   await expect(page).toHaveURL(/\/cs\/\?source=campaign$/);
   await expect(page.locator('html')).toHaveAttribute('lang', 'cs');
   expect(await page.locator('.languages a').evaluateAll(links => links.map(link => link.getAttribute('lang')))).toEqual(['ru', 'cs', 'en']);
-  await expect(page.locator('.languages a')).toHaveText(['RU', 'CZ', 'ENG']);
+  await expect(page.locator('.languages a')).toHaveText(['RU', 'CZ', 'EN']);
   await expect(page.locator('.footer-grid a[lang]')).toHaveCount(0);
 });
 
@@ -143,15 +143,26 @@ for (const width of [320, 430, 768, 999]) {
   });
 }
 
-test('original reviews, contact links and comparison survive language changes', async ({ page }) => {
+test('mixed-language reviews, contact links and comparison survive language changes', async ({ page }) => {
   const externalFonts: string[] = [];
   page.on('request', request => {
     if (/fonts\.(googleapis|gstatic)\.com/.test(request.url())) externalFonts.push(request.url());
   });
   await page.goto('/ru/');
-  await expect(page.locator('.review-card')).toHaveCount(13);
-  await expect(page.locator('.review-card')).toContainText([
-    'Игорь Белов', 'Елена Морозова', 'Александр Петров', 'Марина Соколова',
+  const reviewCards = page.locator('.review-card:not([aria-hidden])');
+  const readReviews = () => reviewCards.evaluateAll(cards => cards.map(card => ({
+    lang: card.getAttribute('lang'),
+    name: card.querySelector('h3')?.textContent,
+    role: card.querySelector('.review-header p')?.textContent,
+    text: card.querySelector('blockquote')?.textContent,
+  })));
+  await expect(reviewCards).toHaveCount(12);
+  const reviews = await readReviews();
+  expect(reviews.map(review => review.lang)).toEqual(['ru', 'en', 'cs', 'ru', 'en', 'cs', 'ru', 'en', 'cs', 'ru', 'en', 'cs']);
+  expect(reviews.slice(0, 3)).toMatchObject([
+    { name: 'Игорь Белов', text: expect.stringContaining('Регулярно рекомендую своим клиентам') },
+    { name: 'Elena Morozova', text: expect.stringContaining('They installed all the wiring') },
+    { name: 'Alexandr Petrov', text: expect.stringContaining('Provedli kompletní elektroinstalaci') },
   ]);
   for (const link of await page.locator('.telegram-link').all()) {
     await expect(link).toHaveAttribute('href', 'https://t.me/+420774411158');
@@ -165,6 +176,7 @@ test('original reviews, contact links and comparison survive language changes', 
       await page.locator(`.languages a[lang="${lang}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('lang', lang);
     }
+    expect(await readReviews()).toEqual(reviews);
     const slider = page.locator('#comparison-range');
     await slider.focus();
     await slider.press('End');
@@ -184,12 +196,44 @@ test('original reviews, contact links and comparison survive language changes', 
   expect(externalFonts).toEqual([]);
 });
 
+for (const width of [430, 1440]) {
+  test(`horizontal review scrolling wraps in both directions at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ru/');
+    const strip = page.locator('.review-strip');
+    await expect(strip.locator('.review-card[aria-hidden="true"]').first()).toBeAttached();
+    await strip.hover();
+
+    const readTrack = () => strip.evaluate(element => {
+      const cards = element.querySelectorAll('.review-card:not([aria-hidden])');
+      const bounds = element.getBoundingClientRect();
+      const leadingEdge = bounds.left + parseFloat(getComputedStyle(element).scrollPaddingLeft) * bounds.width / element.clientWidth;
+      const first = cards[0].getBoundingClientRect().left - leadingEdge;
+      const last = cards[cards.length - 1].getBoundingClientRect().left - leadingEdge;
+      const column = cards[2].getBoundingClientRect().left - leadingEdge - first;
+      return { first, last, column };
+    });
+    await expect.poll(async () => Math.abs((await readTrack()).first)).toBeLessThan(2);
+    const { first, last, column } = await readTrack();
+    await page.mouse.wheel(last - first, 0);
+    await expect.poll(async () => Math.abs((await readTrack()).last)).toBeLessThan(2);
+    await page.mouse.wheel(column, 0);
+    await expect.poll(async () => Math.abs((await readTrack()).first)).toBeLessThan(2);
+    await page.mouse.wheel(-column, 0);
+    await expect.poll(async () => Math.abs((await readTrack()).last)).toBeLessThan(2);
+  });
+}
+
 test('content remains available without JavaScript', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto('/ru/');
   await expect(page.locator('h1')).toBeVisible();
-  await expect(page.locator('#services h3')).toHaveCount(4);
+  await expect(page.locator('.review-card')).toHaveCount(12);
+  await expect(page.locator('#services h3')).toHaveText([
+    'Электромонтаж (силовая часть)', 'Умный дом', 'Солнечная энергия', 'Тепловые насосы',
+    'Планирование проекта', 'Слаботочные системы',
+  ]);
   await expect(page.locator('[data-lead-form]')).toHaveCount(2);
   for (const form of await page.locator('[data-lead-form]').all()) {
     await expect(form.locator('button[type="submit"]')).toBeDisabled();

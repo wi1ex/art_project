@@ -6,7 +6,7 @@ import Icon from './Icon.astro';
 const { lang } = Astro.props as { lang: Language };
 const t = content[lang];
 const labels = interfaceText[lang];
-const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], reviews[9], reviews[10], reviews[0], reviews[1], reviews[2], reviews[3], reviews[11], reviews[12]];
+const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], reviews[9], reviews[10], reviews[0], reviews[1], reviews[2], reviews[3], reviews[11]];
 ---
 <section id="reviews" class="section reviews" aria-labelledby="reviews-heading">
   <div class="container section-heading">
@@ -15,10 +15,83 @@ const ordered = [reviews[4], reviews[5], reviews[6], reviews[7], reviews[8], rev
   </div>
   <div class="review-strip" tabindex="0" role="region" aria-label={t.reviewsLabel}>
     {ordered.map(review => (
-      <article class="review-card">
-        <div class="review-header"><span class="avatar" style={`--avatar: ${review.color}`} aria-hidden="true"></span><div><h3 lang="ru">{review.name}</h3><p>{review.role[lang]}</p></div><span class="stars" aria-label="5 / 5">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span></div>
-        <blockquote>{`"${review.text[lang]}"`}</blockquote>
+      <article class="review-card" lang={review.lang}>
+        <div class="review-header"><span class="avatar" style={`--avatar: ${review.color}`} aria-hidden="true"></span><div><h3>{review.name}</h3><p>{review.role[review.lang]}</p></div><span class="stars" aria-label="5 / 5">{Array.from({ length: 5 }, () => <Icon name="star" />)}</span></div>
+        <blockquote>{`"${review.text[review.lang]}"`}</blockquote>
       </article>
     ))}
   </div>
 </section>
+
+<script>
+  let disposeReviewLoop = () => {};
+
+  function initializeReviewLoop() {
+    const strip = document.querySelector<HTMLElement>('.review-strip');
+    if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+
+    const cards = [...strip.querySelectorAll<HTMLElement>('.review-card')];
+    const duplicateCards = () => cards.map(card => {
+      const copy = card.cloneNode(true) as HTMLElement;
+      copy.inert = true;
+      copy.setAttribute('aria-hidden', 'true');
+      return copy;
+    });
+
+    const before = duplicateCards();
+    const after = duplicateCards();
+    // Start each cycle in the top row of a new column, even with an odd card count.
+    if (cards.length % 2) {
+      const spacer = document.createElement('span');
+      spacer.setAttribute('aria-hidden', 'true');
+      before.push(spacer);
+      strip.append(spacer.cloneNode());
+    }
+    strip.prepend(...before);
+    strip.append(...after);
+
+    const controller = new AbortController();
+    let start = 0;
+    let end = 0;
+    let idleTimer: ReturnType<typeof setTimeout>;
+
+    function measure() {
+      const origin = before[0].offsetLeft;
+      start = cards[0].offsetLeft - origin;
+      end = after[0].offsetLeft - origin;
+    }
+
+    const recenter = () => {
+      const left = strip.scrollLeft;
+      // Allow for fractional CSS pixels when the desktop layout is scaled.
+      if (left < start - 1) strip.scrollTo({ left: left + start, behavior: 'instant' });
+      else if (left >= end - 1) strip.scrollTo({ left: left - (end - start), behavior: 'instant' });
+    };
+
+    measure();
+    strip.scrollTo({ left: start, behavior: 'instant' });
+    const resize = new ResizeObserver(() => {
+      measure();
+      recenter();
+    });
+    resize.observe(strip);
+
+    if ('onscrollend' in window) {
+      strip.addEventListener('scrollend', recenter, { signal: controller.signal });
+    } else {
+      strip.addEventListener('scroll', () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(recenter, 150);
+      }, { passive: true, signal: controller.signal });
+    }
+
+    disposeReviewLoop = () => {
+      controller.abort();
+      resize.disconnect();
+      clearTimeout(idleTimer);
+    };
+  }
+
+  document.addEventListener('astro:page-load', initializeReviewLoop);
+  document.addEventListener('astro:before-swap', () => disposeReviewLoop());
+</script>

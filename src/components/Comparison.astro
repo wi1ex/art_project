@@ -4,14 +4,14 @@ import { interfaceText } from '../data/interface';
 import Icon from './Icon.astro';
 const { lang } = Astro.props as { lang: Language };
 const t = interfaceText[lang];
-const projects = ['smart', 'solar', 'heat', 'electrical'];
+const projects = ['smart', 'solar', 'heat', 'low-voltage'];
 ---
 <div class="comparison-carousel" data-comparison>
   <div class="comparison-stage">
     {projects.map((project, index) => (
-      <div class="comparison-scene" data-scene={index} hidden={index !== 0}>
-        <img src={`/images/comparison-${project}-after.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.after}`} loading="lazy" decoding="async" />
-        <img class="comparison-layer" src={`/images/comparison-${project}-before.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.before}`} loading="lazy" decoding="async" />
+      <div class="comparison-scene" data-scene={index} data-project={project} hidden={index !== 0}>
+        <img src={`/images/comparison-${project}-result.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.after}`} loading="lazy" decoding="async" />
+        <img class="comparison-layer" src={`/images/comparison-${project}-xray.webp`} width="1672" height="941" alt={`${t.projects[index]} — ${t.before}`} loading="lazy" decoding="async" />
       </div>
     ))}
     <span class="comparison-divider" aria-hidden="true"><span><Icon name="chevron-prev" /><Icon name="chevron" /></span></span>

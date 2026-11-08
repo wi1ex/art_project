@@ -30,7 +30,7 @@ for (const lang of languages) {
     expect(company.address).toMatchObject({
       streetAddress: '5. května 1007/3, Nusle', addressLocality: 'Praha 4', postalCode: '140 00', addressCountry: 'CZ',
     });
-    expect(company.hasOfferCatalog.itemListElement).toHaveLength(4);
+    expect(company.hasOfferCatalog.itemListElement).toHaveLength(6);
     expect(company).not.toHaveProperty('aggregateRating');
     expect(company).not.toHaveProperty('openingHours');
     await expect(page.locator('footer')).toContainText(company.name);

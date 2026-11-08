@@ -137,12 +137,9 @@ test('a classic scrollbar and the CSS zoom fallback fit the available content wi
 test('the scaled desktop service carousel uses a complete logical card step', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto('/en/');
-  // Extend the real rail so a full-card step is possible instead of clamping to its short final offset.
   const step = await page.locator('#service-list').evaluate(list => {
-    const cards = [...list.querySelectorAll<HTMLElement>('li')];
-    for (const card of cards.slice(0, 2)) list.append(card.cloneNode(true));
-    list.scrollLeft = 0;
-    return cards[0].offsetWidth + parseFloat(getComputedStyle(list).columnGap);
+    const card = list.querySelector('li')!;
+    return card.offsetWidth + parseFloat(getComputedStyle(list).columnGap);
   });
   const next = page.locator('[data-carousel-controls] [data-slide="1"]');
   await next.focus();
@@ -152,6 +149,8 @@ test('the scaled desktop service carousel uses a complete logical card step', as
   const previous = page.locator('[data-carousel-controls] [data-slide="-1"]');
   await previous.click();
   await expect.poll(() => page.locator('#service-list').evaluate(list => list.scrollLeft)).toBeLessThan(2);
+  await previous.click();
+  await expect(page.locator('#service-list li').last()).toBeInViewport();
 });
 
 test('scaled desktop inputs receive pointer and keyboard interaction at their visible positions', async ({ page }) => {

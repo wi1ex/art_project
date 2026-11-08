@@ -77,7 +77,7 @@
   .service-grid { display: flex; gap: 30px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: max(32px, calc((calc(100 * var(--layout-vw)) - 1800px) / 2)); padding: 0 max(32px, calc((calc(100 * var(--layout-vw)) - 1800px) / 2)) 4px; scrollbar-width: none; }
   .service-grid li { flex: 0 0 clamp(300px, calc(25.47 * var(--layout-vw)), 489px); scroll-snap-align: start; }
   .service-grid img { width: 100%; aspect-ratio: 489 / 430; object-fit: cover; border-radius: 12px; background: #f8f8f7; }
-  .service-grid li:last-child img { object-fit: contain; object-position: left center; }
+  .service-grid [data-service="heat"] img { object-fit: contain; object-position: left center; }
   .service-grid h3 { margin-block: 24px 12px; }
   .service-grid p { font-size: clamp(14px, calc(1.04 * var(--layout-vw)), 20px); line-height: 1.65; }
   .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 40px; margin-bottom: 78px; }
@@ -90,6 +90,7 @@
   .comparison-carousel { --split: 50%; }
   .comparison-stage { position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 1700 / 932; }
   .comparison-scene { position: absolute; inset: 0; }
+  .comparison-scene[data-project="low-voltage"] { background: #242424; }
   .comparison-scene img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   .comparison-layer { clip-path: inset(0 0 0 var(--split)); }
   .comparison-divider { position: absolute; top: 0; bottom: 0; left: var(--split); border-left: 2px solid #fff; pointer-events: none; }
@@ -220,7 +221,10 @@
     .comparison-range { writing-mode: vertical-lr; direction: ltr; cursor: ns-resize; touch-action: pan-x; }
     .comparison-divider > span { width: 70px; height: 55px; gap: 0; }
     .comparison-divider .icon { width: 20px; height: 20px; }
-    .comparison-scene[data-scene="2"] img { object-position: 21% center; }
+    .comparison-scene[data-project="smart"] img { object-position: 3% center; }
+    .comparison-scene[data-project="solar"] img { object-position: 65% center; }
+    .comparison-scene[data-project="heat"] img { object-position: 21% center; }
+    .comparison-scene[data-project="low-voltage"] img { object-position: 15% center; }
     .comparison-navigation { justify-content: space-between; margin-top: 20px; }
     .eyebrow { margin-bottom: 7px; font-size: 12px; line-height: 18px; }
     .section-intro { margin-top: 20px; max-width: 350px; }
